@@ -1,0 +1,19 @@
+{
+  "name": "decent_chatbot_be",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shayanmomeni/decent_chatbot_BE.git"
+  },
+  "author": "Bareen Miraj",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/shayanmomeni/decent_chatbot_BE/issues"
+  },
+  "homepage": "https://github.com/shayanmomeni/decent_chatbot_BE#readme",
+  "description": ""
+}
