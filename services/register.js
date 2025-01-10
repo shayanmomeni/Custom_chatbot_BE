@@ -1,62 +1,58 @@
-const jwt = require('jsonwebtoken');
-const MongoClient = require('mongodb').MongoClient;
-const jwtSecret = process.env.JWT_SECRET;
-const jwtExpirySeconds = process.env.JWT_EXPIRY_SECONDS;
+const connectToMongoDB = require('../database');
+const { generateToken } = require('../utils/jwt');
+const { hashPassword } = require('../utils/password');
 
 const registerService = async (req, res) => {
-    console.log('Received register request:', req.body);
-    const { username, password, fullName } = req.body;
+  console.log('Received register request:', req.body);
+  const { username, password, fullName } = req.body;
 
-    // Validate input
-    if (!username || !password) {
-        console.log('Missing username or password');
-        return res.status(400).json({
-            message: 'Username and password are required', 
-            error_code: 'missing_fields',
-        });
+  if (!username || !password) {
+    return res.status(400).json({
+      message: 'Username and password are required',
+      error_code: 'missing_fields',
+    });
+  }
+
+  try {
+    const db = await connectToMongoDB();
+
+    // Check if user already exists
+    const existingUser = await db.collection('users').findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'User already exists',
+        error_code: 'user_exists',
+      });
     }
 
-    try {
-        const client = await MongoClient.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
-        const db = client.db(process.env.DB_NAME);
+    // Hash the password
+    const hashedPassword = await hashPassword(password);
 
-        // Check if the user already exists
-        const existingUser = await db.collection('users').findOne({ username });
-        if (existingUser) {
-            client.close();
-            return res.status(400).json({
-                message: 'User already exists',
-                error_code: 'user_exists',
-            });
-        }
+    // Insert new user
+    const result = await db.collection('users').insertOne({
+      username,
+      password: hashedPassword,
+      fullName,
+    });
 
-        // Create new user
-        const result = await db.collection('users').insertOne({ username, password, fullName });
+    // Generate JWT token
+    const token = generateToken({ username });
 
-        // Generate JWT token
-        const token = jwt.sign({ username }, jwtSecret, {
-            algorithm: 'HS256',
-            expiresIn: parseInt(jwtExpirySeconds) || jwtExpirySeconds // Ensure it's a number or valid string
-        });
-
-        client.close();
-
-        return res.status(201).json({ 
-            message: 'User registered successfully', 
-            error_code: 'none',
-            data: {
-                acknowledged: result.acknowledged,
-                insertedId: result.insertedId,
-                token: token
-            }
-        });
-    } catch (err) {
-        console.log('Database error:', err);
-        return res.status(500).json({
-            message: 'Database error',
-            error_code: 'database_error',
-        });
-    }
-}
+    return res.status(201).json({
+      message: 'User registered successfully',
+      data: {
+        acknowledged: result.acknowledged,
+        insertedId: result.insertedId,
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('Database error:', error);
+    return res.status(500).json({
+      message: 'Database error',
+      error_code: 'database_error',
+    });
+  }
+};
 
 module.exports = registerService;

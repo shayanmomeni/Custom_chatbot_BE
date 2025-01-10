@@ -1,26 +1,24 @@
-const MongoClient = require('mongodb').MongoClient;
-const { ObjectId } = require('mongodb'); // Correct import
+const connectToMongoDB = require('../database');
+const { ObjectId } = require('mongodb');
 
 const removeUserService = async (req, res) => {
-    const { userId } = req.params;
+  const { userId } = req.params;
 
-    try {
-        const client = await MongoClient.connect(process.env.MONGO_URL, { useNewUrlParser: true, useUnifiedTopology: true });
-        const db = client.db(process.env.DB_NAME);
+  try {
+    const db = await connectToMongoDB();
 
-        // Remove user by ID
-        const result = await db.collection('users').deleteOne({ _id: new ObjectId(userId) });
-        client.close();
+    // Remove user by ID
+    const result = await db.collection('users').deleteOne({ _id: new ObjectId(userId) });
 
-        if (result.deletedCount === 0) {
-            return res.status(404).send('User not found');
-        }
-
-        return res.status(200).send('User removed successfully');
-    } catch (err) {
-        console.log('Database error:', err);
-        return res.status(500).send('Database error');
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'User not found' });
     }
-}
+
+    return res.status(200).json({ message: 'User removed successfully' });
+  } catch (error) {
+    console.error('Database error:', error);
+    return res.status(500).json({ message: 'Database error' });
+  }
+};
 
 module.exports = removeUserService;
