@@ -13,6 +13,9 @@ const registerService = require('./services/register');
 const loginService = require('./services/login');
 const removeUserService = require('./services/remove_user');
 const sendMessageService = require('./services/send_message');
+const saveAssessment = require('./services/assessment');
+const saveSelfAspects = require('./services/self_aspects');
+
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -31,17 +34,19 @@ app.get('/', (req, res) => {
   res.send('Server is running');
 });
 
-// Login Route
+// Authentication Routes
 app.post('/login', loginService);
-
-// Register Route
 app.post('/register', registerService);
 
-// Remove User Route
+// User Management Routes
 app.delete('/user/:userId', removeUserService);
 
 // Message Route
 app.post('/send-message', sendMessageService);
+
+// Assessment and Self-Aspects Routes
+app.put('/assessment', saveAssessment); 
+app.put('/self-aspects', saveSelfAspects); 
 
 // Connect to MongoDB
 connectToMongoDB(); 

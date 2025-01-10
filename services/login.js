@@ -1,4 +1,4 @@
-const connectToMongoDB = require('../database');
+const User = require('../models/User'); // Use the User model
 const { generateToken } = require('../utils/jwt');
 const { verifyPassword } = require('../utils/password');
 
@@ -6,11 +6,16 @@ const loginService = async (req, res) => {
   console.log('Received login request:', req.body);
   const { username, password } = req.body;
 
-  try {
-    const db = await connectToMongoDB();
+  if (!username || !password) {
+    return res.status(400).json({
+      message: 'Username and password are required',
+    });
+  }
 
-    // Find user by username
-    const user = await db.collection('users').findOne({ username });
+  try {
+    // Find user by username using mongoose
+    const user = await User.findOne({ username });
+
     if (!user) {
       return res.status(401).json({ message: 'Login failed: user not found' });
     }
