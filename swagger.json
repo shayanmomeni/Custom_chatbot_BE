@@ -1,0 +1,167 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "version": "1.0.0",
+        "title": "Decent Chatbot API",
+        "description": "API documentation for Decent Chatbot"
+    },
+    "host": "localhost:8888",
+    "basePath": "/",
+    "schemes": ["http"],
+    "paths": {
+        "/": {
+            "get": {
+                "summary": "Home Route",
+                "description": "Returns a message indicating the server is running",
+                "responses": {
+                    "200": {
+                        "description": "Server is running"
+                    }
+                }
+            }
+        },
+        "/login": {
+            "post": {
+                "summary": "Login",
+                "description": "Logs in a user",
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "description": "User credentials",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "username": {
+                                    "type": "string"
+                                },
+                                "password": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Login successful"
+                    },
+                    "401": {
+                        "description": "Login failed"
+                    }
+                }
+            }
+        },
+        "/register": {
+            "post": {
+                "summary": "Register",
+                "description": "Registers a new user",
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "description": "User details",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "username": {
+                                    "type": "string"
+                                },
+                                "password": {
+                                    "type": "string"
+                                },
+                                "fullName": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Registration successful"
+                    },
+                    "400": {
+                        "description": "Registration failed"
+                    }
+                }
+            }
+        },
+        "/user/{userId}": {
+            "delete": {
+                "summary": "Remove User",
+                "description": "Removes a user by ID",
+                "parameters": [
+                    {
+                        "name": "userId",
+                        "in": "path",
+                        "required": true,
+                        "type": "string",
+                        "description": "ID of the user to remove"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User removed successfully"
+                    },
+                    "404": {
+                        "description": "User not found"
+                    },
+                    "500": {
+                        "description": "Database error"
+                    }
+                }
+            }
+        },
+        "/send-message": {
+            "post": {
+                "summary": "Send Message",
+                "description": "Sends a user message and receives a mock response",
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "description": "Message details",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "userId": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": ["userId", "message"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Message processed successfully",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string"
+                                },
+                                "data": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - Missing fields"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        }
+    }
+}
