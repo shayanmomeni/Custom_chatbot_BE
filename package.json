@@ -17,6 +17,7 @@
   "homepage": "https://github.com/shayanmomeni/decent_chatbot_BE#readme",
   "description": "",
   "dependencies": {
+    "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
     "body-parser": "^1.20.3",
     "dotenv": "^16.4.7",
