@@ -27,12 +27,13 @@ const loginService = async (req, res) => {
     }
 
     // Generate JWT token
-    const token = generateToken({ username });
+    const token = generateToken({ username, id: user._id });
 
     return res.status(200).json({
       message: 'Login successful',
       token,
       userDetails: {
+        userId: user._id, // Include user ID
         username: user.username,
         fullName: user.fullName,
       },
@@ -41,6 +42,5 @@ const loginService = async (req, res) => {
     console.error('Database error:', error);
     return res.status(500).json({ message: 'Database error' });
   }
-};
-
+}
 module.exports = loginService;

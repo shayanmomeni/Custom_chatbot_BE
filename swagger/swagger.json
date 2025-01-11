@@ -162,6 +162,86 @@
                     }
                 }
             }
+        },
+        "/assessment": {
+            "put": {
+                "summary": "Save Assessment",
+                "description": "Saves the user's assessment answers",
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "description": "Assessment data",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "userId": {
+                                    "type": "string"
+                                },
+                                "answers": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "required": ["userId", "answers"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Assessment saved successfully"
+                    },
+                    "400": {
+                        "description": "Invalid request data"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
+        },
+        "/self-aspects": {
+            "put": {
+                "summary": "Save Self-Aspects",
+                "description": "Saves the user's selected self-aspects",
+                "parameters": [
+                    {
+                        "in": "body",
+                        "name": "body",
+                        "description": "Self-aspects data",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "userId": {
+                                    "type": "string"
+                                },
+                                "aspects": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            },
+                            "required": ["userId", "aspects"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Self-aspects saved successfully"
+                    },
+                    "400": {
+                        "description": "Invalid request data"
+                    },
+                    "500": {
+                        "description": "Internal server error"
+                    }
+                }
+            }
         }
     }
 }
