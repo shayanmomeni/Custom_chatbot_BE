@@ -10,18 +10,42 @@ const saveAssessment = async (req, res) => {
       error_code: 'missing_user_id',
     });
   }
-  if (!Array.isArray(answers) || answers.length !== 10 || answers.some(answer => typeof answer !== 'string')) {
+
+  // Validate that answers is an array of 10 items
+  if (!Array.isArray(answers) || answers.length !== 10) {
     return res.status(400).json({
-      message: 'Answers must be an array of exactly 10 strings.',
-      error_code: 'invalid_answers',
+      message: 'Answers must be an array of exactly 10 items (one for each question).',
+      error_code: 'invalid_answers_length',
     });
   }
 
+  // Validate each question's answers
+  for (let i = 0; i < answers.length; i++) {
+    const questionAnswers = answers[i];
+
+    if (!Array.isArray(questionAnswers) || questionAnswers.length < 1 || questionAnswers.length > 10) {
+      return res.status(400).json({
+        message: `Question ${i + 1} must have at least 1 answer and no more than 10 answers.`,
+        error_code: 'invalid_question_answers',
+      });
+    }
+
+    if (questionAnswers.some(answer => typeof answer !== 'string')) {
+      return res.status(400).json({
+        message: `Question ${i + 1} contains invalid answers. All answers must be strings.`,
+        error_code: 'invalid_answer_type',
+      });
+    }
+  }
+
   try {
-    // Find user and update assessmentAnswers
+    // Flatten the answers if necessary for storage
+    const flattenedAnswers = answers.map(qAnswers => qAnswers.join(','));
+
+    // Save the assessment answers for the user
     const user = await User.findByIdAndUpdate(
       userId,
-      { assessmentAnswers: answers },
+      { assessmentAnswers: flattenedAnswers },
       { new: true } // Return the updated user document
     );
 

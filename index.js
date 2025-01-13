@@ -1,10 +1,10 @@
-require('dotenv').config(); 
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const http = require('http');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./swagger/swagger.json');
-const connectToMongoDB = require('./database'); 
+const connectToMongoDB = require('./database');
 const app = express();
 const server = http.createServer(app);
 
@@ -15,7 +15,7 @@ const removeUserService = require('./services/remove_user');
 const sendMessageService = require('./services/send_message');
 const saveAssessment = require('./services/assessment');
 const saveSelfAspects = require('./services/self_aspects');
-
+const getAssessment = require('./services/get_assessment');
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -25,7 +25,7 @@ app.use(bodyParser.json());
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Variables
-const port = process.env.PORT;
+const port = process.env.PORT || 8000;
 
 // RESTful API Routes
 
@@ -42,14 +42,17 @@ app.post('/register', registerService);
 app.delete('/user/:userId', removeUserService);
 
 // Message Route
-app.post('/send-message', sendMessageService);
+app.post('/send-message', sendMessageService); 
 
-// Assessment and Self-Aspects Routes
-app.put('/assessment', saveAssessment); 
-app.put('/self-aspects', saveSelfAspects); 
+// Assessment Routes
+app.put('/assessment', saveAssessment);
+app.get('/assessment', getAssessment);
+
+// Self-Aspects Routes
+app.put('/self-aspects', saveSelfAspects);
 
 // Connect to MongoDB
-connectToMongoDB(); 
+connectToMongoDB();
 
 // Start server
 server.listen(port, () => {

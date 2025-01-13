@@ -201,6 +201,44 @@
                         "description": "Internal server error"
                     }
                 }
+            },
+            "get": {
+                "summary": "Get Assessment",
+                "description": "Retrieves the user's assessment answers",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "userId",
+                        "required": true,
+                        "type": "string",
+                        "description": "User ID to retrieve the assessment answers for"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Assessment retrieved successfully",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string"
+                                },
+                                "data": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request data"
+                    },
+                    "404": {
+                        "description": "User not found"
+                    }
+                }
             }
         },
         "/self-aspects": {

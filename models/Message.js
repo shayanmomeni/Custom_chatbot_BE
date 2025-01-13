@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const MessageSchema = new mongoose.Schema({
   userId: {
@@ -13,14 +13,10 @@ const MessageSchema = new mongoose.Schema({
     type: String,
     default: null,
   },
-  openAIResponse: {
-    type: String,
-    default: null,
-  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
 
-module.exports = mongoose.model('Message', MessageSchema);
+module.exports = mongoose.model("Message", MessageSchema);
