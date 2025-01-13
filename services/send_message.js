@@ -35,7 +35,6 @@ const handleMessage = async (req, res) => {
     console.log("[Service] Is positive response:", isPositiveResponse);
 
     if (isPositiveResponse) {
-      // Handle "yes" response flow
       return res.status(200).json({
         message: "Message processed successfully",
         data: {
@@ -46,7 +45,6 @@ const handleMessage = async (req, res) => {
         },
       });
     } else {
-      // Handle "no" response flow
       return res.status(200).json({
         message: "Message processed successfully",
         data: {
@@ -115,21 +113,16 @@ h. I don't know how to answer that.`,
     }
 
     const systemMessage = `
-      You are a conversational assistant guiding users through a predefined flow of questions in English.
+      You are a conversational assistant guiding users through a predefined flow of questions.
+      Strictly follow the predefined questions and do not add any unrelated questions.
       Current step: ${currentStep}
-      Previous messages: ${JSON.stringify(chatMessages)}
       Current question to ask: ${
         typeof predefinedQuestions[currentStep] === "function"
           ? predefinedQuestions[currentStep](activity)
           : predefinedQuestions[currentStep]?.nextQuestion || predefinedQuestions[currentStep]
       }
-      Please respond naturally in English and follow the exact question flow.
+      Please respond naturally and stick to the predefined flow only.
     `;
-
-    console.log("[ChatGPT] Sending request with messages:", JSON.stringify([
-      { role: "system", content: systemMessage },
-      ...chatMessages,
-    ], null, 2));
 
     const openAIResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -144,8 +137,18 @@ h. I don't know how to answer that.`,
       }
     );
 
-    const assistantMessage = openAIResponse.data.choices[0].message.content.trim();
-    console.log("[ChatGPT] Response from ChatGPT:", assistantMessage);
+    let assistantMessage = openAIResponse.data.choices[0].message.content.trim();
+
+    // Validate if the response matches the predefined flow
+    const expectedResponse =
+      typeof predefinedQuestions[currentStep] === "function"
+        ? predefinedQuestions[currentStep](activity)
+        : predefinedQuestions[currentStep]?.nextQuestion || predefinedQuestions[currentStep];
+
+    if (!assistantMessage.includes(expectedResponse)) {
+      console.log("[Service] ChatGPT response deviates from predefined flow. Correcting...");
+      assistantMessage = expectedResponse;
+    }
 
     const nextStep = determineNextStep(currentStep, message, activity);
     const isEnd = nextStep === "end";
