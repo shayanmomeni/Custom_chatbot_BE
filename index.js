@@ -24,6 +24,12 @@ app.use(bodyParser.json());
 // Swagger setup
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+// Error handling middleware (centralized)
+app.use((err, req, res, next) => {
+  console.error('Server Error:', err);
+  res.status(500).json({ message: 'Internal Server Error' });
+});
+
 // Variables
 const port = process.env.PORT || 8000;
 
@@ -42,7 +48,7 @@ app.post('/register', registerService);
 app.delete('/user/:userId', removeUserService);
 
 // Message Route
-app.post('/send-message', sendMessageService); 
+app.post('/send-message', sendMessageService);
 
 // Assessment Routes
 app.put('/assessment', saveAssessment);

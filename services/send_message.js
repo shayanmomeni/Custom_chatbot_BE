@@ -1,103 +1,204 @@
 const axios = require("axios");
 
-// Store conversation history per user
-const conversationHistory = {};
-
 const handleMessage = async (req, res) => {
-  const { message, userId, currentStep } = req.body;
+  const { message, userId, currentStep, history } = req.body;
 
-  console.log("[Service] Received payload:", { message, userId, currentStep });
+  console.log("[Service] Received payload:", JSON.stringify({ message, userId, currentStep, history }, null, 2));
+  console.log("[Service] Initial step check - Current step:", currentStep);
 
-  if (!message || !userId || !currentStep) {
+  if (!message || !userId || !currentStep || !history) {
     console.error("[Service] Missing required parameters");
     return res.status(400).json({
-      message: "Bad Request: 'message', 'userId', and 'currentStep' are required.",
+      message: "Bad Request: 'message', 'userId', 'currentStep', and 'history' are required.",
     });
   }
 
-  try {
-    // Build the system message with context
-    const systemMessage = `
-      You are a conversational assistant guiding users through a predefined flow.
-      Current step: ${currentStep}.
-      Rules:
-      1. Based on the current step, guide the user to the next step in the flow.
-      2. If the user's response is unrelated or unclear, politely redirect them to the last relevant question.
-      3. Keep the context of the conversation and ensure a polite and engaging tone at all times.
-      
-      Example flow:
-      - If the current step is "awaiting_time_response", respond based on 'yes' or 'no'.
-      - If the step is "ask_location", ask: "Where are you located?"
-      - If the step is "ask_company", ask: "Are you alone? If not, who is with you?"
-    `;
+  // Add specific validation for the first yes/no response
+  if (currentStep === "awaiting_time_response") {
+    const normalizedResponse = message.toLowerCase().trim();
+    console.log("[Service] First question response:", normalizedResponse);
 
-    // Initialize conversation history for the user if not present
-    if (!conversationHistory[userId]) {
-      conversationHistory[userId] = [
-        { role: "system", content: systemMessage },
-      ];
+    if (!["yes", "no", "ja", "nein"].includes(normalizedResponse)) {
+      console.log("[Service] Invalid first response, expecting yes/no");
+      return res.status(200).json({
+        message: "Message processed successfully",
+        data: {
+          originalMessage: message,
+          openAIResponse: "Please answer with 'yes' or 'no'.",
+          nextStep: "awaiting_time_response",
+          isEnd: false,
+        },
+      });
     }
 
-    // Append user's message to history
-    conversationHistory[userId].push({ role: "user", content: message });
+    const isPositiveResponse = ["yes", "ja"].includes(normalizedResponse);
+    console.log("[Service] Is positive response:", isPositiveResponse);
 
-    // Call ChatGPT API
-    const response = await axios.post(
+    if (isPositiveResponse) {
+      // Handle "yes" response flow
+      return res.status(200).json({
+        message: "Message processed successfully",
+        data: {
+          originalMessage: message,
+          openAIResponse: "Great! Let's proceed. Where are you?",
+          nextStep: "ask_location",
+          isEnd: false,
+        },
+      });
+    } else {
+      // Handle "no" response flow
+      return res.status(200).json({
+        message: "Message processed successfully",
+        data: {
+          originalMessage: message,
+          openAIResponse: "Ah, ok. Why not?",
+          nextStep: "why_not",
+          isEnd: false,
+        },
+      });
+    }
+  }
+
+  const chatMessages = history.map((msg) => ({
+    role: msg.isSentByUser ? "user" : "assistant",
+    content: msg.text || msg.content,
+  }));
+
+  chatMessages.push({ role: "user", content: message });
+
+  console.log("[Service] Processed chat messages:", JSON.stringify(chatMessages, null, 2));
+
+  const predefinedQuestions = {
+    awaiting_time_response: "Do you have time? Please answer 'yes' or 'no'.",
+    why_not: "Ah, ok. Why not?",
+    feeling: "Got it. How are you feeling right now?",
+    closing: "Okay, I'll ask again later. Take care! You can close the chat now.",
+    ask_location: "Where are you?",
+    ask_company: "Are you alone? If not, who is with you?",
+    current_activity: "What are you doing right now?",
+    frequency: `How often do you do this per week? Options:
+a. Every day (7+ times)
+b. Almost daily (5-7 times)
+c. Often (3-5 times)
+d. Occasionally (1-2 times)
+e. Rarely (<1 time)
+f. Never, this is an exception
+h. I don't know how to answer that.`,
+    why_frequency_h: "Ah, ok. Why not?",
+    frequency_a: {
+      response: "Ah, so you do this daily.",
+      nextQuestion: "Would you say this is a routine for you? Something you regularly do in your daily life? Yes or No?",
+    },
+    frequency_other: {
+      response: "Ah, so not daily.",
+      nextQuestion: "Would you say this is a routine for you? Something you regularly do in your daily life? Yes or No?",
+    },
+    routine: "Would you say this is a routine for you? Something you regularly do in your daily life? Yes or No?",
+    decision: (activity) => `So, you are currently doing: »${activity}«. Pick a decision within this activity that involves some degree of choice. What decision would you like to discuss?`,
+    options: "What options do you have within this decision?",
+    example: "What could you do, for example?",
+    other_option: "And what other option could there be?",
+    final_option: "Okay. What else could you do?",
+    end: "We have reached the end of the conversation. Thank you for your time! Please press 'End' at the top right to close the chat.",
+  };
+
+  try {
+    let activity = "";
+    if (currentStep === "decision") {
+      const activityMessage = history.find(
+        (msg) =>
+          msg.role === "user" &&
+          history[history.indexOf(msg) - 1]?.content?.includes("What are you doing right now?")
+      );
+      activity = activityMessage?.content || "[activity not found]";
+      console.log("[Service] Retrieved activity for decision step:", activity);
+    }
+
+    const systemMessage = `
+      You are a conversational assistant guiding users through a predefined flow of questions in English.
+      Current step: ${currentStep}
+      Previous messages: ${JSON.stringify(chatMessages)}
+      Current question to ask: ${
+        typeof predefinedQuestions[currentStep] === "function"
+          ? predefinedQuestions[currentStep](activity)
+          : predefinedQuestions[currentStep]?.nextQuestion || predefinedQuestions[currentStep]
+      }
+      Please respond naturally in English and follow the exact question flow.
+    `;
+
+    console.log("[ChatGPT] Sending request with messages:", JSON.stringify([
+      { role: "system", content: systemMessage },
+      ...chatMessages,
+    ], null, 2));
+
+    const openAIResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: "gpt-4",
-        messages: conversationHistory[userId],
+        messages: [{ role: "system", content: systemMessage }, ...chatMessages],
         temperature: 0.7,
-        max_tokens: 150,
+        max_tokens: 1024,
       },
       {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
       }
     );
 
-    const assistantMessage =
-      response.data.choices[0]?.message?.content.trim() || "No response.";
-    console.log("[Service] Response from ChatGPT:", assistantMessage);
+    const assistantMessage = openAIResponse.data.choices[0].message.content.trim();
+    console.log("[ChatGPT] Response from ChatGPT:", assistantMessage);
 
-    // Append ChatGPT's response to history
-    conversationHistory[userId].push({ role: "assistant", content: assistantMessage });
+    const nextStep = determineNextStep(currentStep, message, activity);
+    const isEnd = nextStep === "end";
 
-    // Determine the next step based on the current step and message
-    const nextStep = determineNextStep(currentStep, message);
+    console.log(`[Service] Step Transition: ${currentStep} -> ${nextStep} (End: ${isEnd})`);
+    console.log(`[Service] Next question to ask: ${predefinedQuestions[nextStep]?.nextQuestion || predefinedQuestions[nextStep]}`);
 
-    // Respond to the frontend
     res.status(200).json({
       message: "Message processed successfully",
       data: {
         originalMessage: message,
         openAIResponse: assistantMessage,
         nextStep,
+        isEnd,
       },
     });
   } catch (error) {
-    console.error("[Service] Error calling ChatGPT API:", error.message);
+    console.error("[Service] Error processing message:", error);
     res.status(500).json({
       message: "Internal Server Error: Failed to process the message.",
+      error: error.message,
     });
   }
 };
 
-// Determine the next step based on current step and user input
-const determineNextStep = (currentStep, userMessage) => {
-  const lowerMessage = userMessage.toLowerCase();
+const determineNextStep = (currentStep, userMessage, activity = "") => {
+  const normalizedMessage = userMessage.toLowerCase().trim();
 
-  switch (currentStep) {
-    case "awaiting_time_response":
-      return lowerMessage === "yes" ? "ask_location" : "ask_company";
-    case "ask_location":
-      return lowerMessage ? "ask_company" : currentStep;
-    case "ask_company":
-      return "current_activity";
-    default:
-      return currentStep; // Default to current step if no match
-  }
+  const flow = {
+    awaiting_time_response: () => (normalizedMessage === "yes" ? "ask_location" : "why_not"),
+    why_not: () => "feeling",
+    feeling: () => "closing",
+    closing: () => "end",
+    ask_location: () => "ask_company",
+    ask_company: () => "current_activity",
+    current_activity: () => "frequency",
+    frequency: () => {
+      if (normalizedMessage === "h") return "why_frequency_h";
+      if (normalizedMessage === "a") return "frequency_a";
+      return "frequency_other";
+    },
+    why_frequency_h: () => "routine",
+    frequency_a: () => "routine",
+    frequency_other: () => "routine",
+    routine: () => "decision",
+    decision: () => "options",
+    options: () => "example",
+    example: () => "other_option",
+    other_option: () => "final_option",
+    final_option: () => "end",
+  };
+
+  return flow[currentStep] ? flow[currentStep]() : currentStep;
 };
 
 module.exports = handleMessage;
