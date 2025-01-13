@@ -68,23 +68,23 @@ const handleMessage = async (req, res) => {
 
   const predefinedQuestions = {
     awaiting_time_response: "Do you have time? Please answer 'yes' or 'no'.",
-    why_not: "Ah, ok. Why not?",
-    feeling: "Got it. How are you feeling right now?",
-    closing: "Okay, I'll ask again later. Take care! You can close the chat now.",
-    ask_location: "Where are you?",
+    why_not: "I understand. Would you like to share why not?",
+    feeling: "Got it. How are you feeling right now? It's okay to share as much or as little as you like.",
+    closing: "Thank you for sharing. I'll check back later. Take care! You can close the chat now if you're done.",
+    ask_location: "Where are you right now? Feel free to share as much detail as you're comfortable with.",
     ask_company: "Are you alone? If not, who is with you?",
     current_activity: "What are you doing right now?",
     frequency: `How often do you do this per week? Options:
-a. Every day (7+ times)
-b. Almost daily (5-7 times)
-c. Often (3-5 times)
-d. Occasionally (1-2 times)
-e. Rarely (<1 time)
-f. Never, this is an exception
-h. I don't know how to answer that.`,
-    why_frequency_h: "Ah, ok. Why not?",
+  a. Every day (7+ times)
+  b. Almost daily (5-7 times)
+  c. Often (3-5 times)
+  d. Occasionally (1-2 times)
+  e. Rarely (<1 time)
+  f. Never, this is an exception
+  h. I don't know how to answer that.`,
+    why_frequency_h: "That's okay. Could you tell me more about it?",
     frequency_a: {
-      response: "Ah, so you do this daily.",
+      response: "I see you do this daily. That sounds like a routine.",
       nextQuestion: "Would you say this is a routine for you? Something you regularly do in your daily life? Yes or No?",
     },
     frequency_other: {
@@ -92,14 +92,14 @@ h. I don't know how to answer that.`,
       nextQuestion: "Would you say this is a routine for you? Something you regularly do in your daily life? Yes or No?",
     },
     routine: "Would you say this is a routine for you? Something you regularly do in your daily life? Yes or No?",
-    decision: (activity) => `So, you are currently doing: »${activity}«. Pick a decision within this activity that involves some degree of choice. What decision would you like to discuss?`,
+    decision: (activity) =>
+      `So, you're currently doing: "${activity}". Could you pick a decision within this activity that involves some degree of choice? What decision would you like to discuss?`,
     options: "What options do you have within this decision?",
     example: "What could you do, for example?",
     other_option: "And what other option could there be?",
     final_option: "Okay. What else could you do?",
     end: "We have reached the end of the conversation. Thank you for your time! Please press 'End' at the top right to close the chat.",
   };
-
   try {
     let activity = "";
     if (currentStep === "decision") {
