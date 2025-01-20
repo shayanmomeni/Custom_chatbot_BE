@@ -1,95 +1,75 @@
 const UserResponse = require("../models/UserResponse");
 const { getNextStep, predefinedQuestions } = require("../shared/flow_logic");
-const { getChatGPTResponse } = require("../utils/chatgpt");
+const { getChatGPTValidation } = require("../utils/chatgpt");
 
 const handleMessage = async (req, res) => {
-  const { message, userId, currentStep, history } = req.body;
-
-  console.log("[Backend] Received message:", message);
-  console.log("[Backend] Current step:", currentStep);
-
-  if (!message || !userId || !currentStep || !history) {
-    return res.status(400).json({ message: "Bad Request: Missing required parameters." });
-  }
+  const { message, userId, currentStep } = req.body;
 
   try {
-    // Save user response to the database
-    await UserResponse.create({ userId, questionKey: currentStep, response: message });
-    console.log(`[Backend] Saved response for step ${currentStep}: ${message}`);
-
-    // Prepare validation request for ChatGPT
     const currentQuestion = predefinedQuestions[currentStep];
-    const messagesForChatGPT = [
-      {
-        role: "system",
-        content: `
-          You are a validation system. Only validate if the user's response is relevant to the question: 
-          "${currentQuestion}". Respond with "valid" if the answer is correct, otherwise respond with "invalid".
-        `,
-      },
-      {
-        role: "assistant",
-        content: currentQuestion,
-      },
-      {
-        role: "user",
-        content: message,
-      },
-    ];
+    if (!currentQuestion) {
+      console.error("[Backend] Invalid current step:", currentStep);
+      return res.status(400).json({ message: "Invalid current step." });
+    }
 
-    // Validate response using ChatGPT
-    const chatGPTResponse = await getChatGPTResponse(messagesForChatGPT);
-    console.log("[ChatGPT] Validation response:", chatGPTResponse);
+    console.log(`[Backend] Received message: "${message}" for step: "${currentStep}"`);
 
-    const isResponseValid = chatGPTResponse.trim().toLowerCase() === "valid";
+    // Validate response with ChatGPT
+    const { validationMessage, isValid } = await getChatGPTValidation(currentQuestion, message);
 
-    if (isResponseValid) {
-      // Determine the next step
+    console.log(`[ChatGPT] Validation message: "${validationMessage}"`);
+    console.log(`[Backend] Is response valid: ${isValid}`);
+
+    if (isValid) {
+      // Save the valid response
+      await UserResponse.findOneAndUpdate(
+        { userId, questionKey: currentStep },
+        { response: message },
+        { upsert: true, new: true }
+      );
+      console.log(`[Backend] Saved valid response for step: "${currentStep}", response: "${message}"`);
+
+      // Get the next step and prepare the response
       const nextStep = getNextStep(currentStep, message);
-      let responseMessage = predefinedQuestions[nextStep] || "End of flow.";
+      let nextQuestion = predefinedQuestions[nextStep] || "End of flow.";
 
-      // Handle activity placeholder for `yes_q6`
+      // Handle dynamic placeholder replacement
       if (nextStep === "yes_q6") {
         const activityResponse = await UserResponse.findOne({
           userId,
-          questionKey: "yes_q3",
+          questionKey: "yes_q3", // Fetching the response from step `yes_q3`
         });
 
         const activity = activityResponse?.response || "[activity not found]";
-        responseMessage = responseMessage.replace(
-          "»{activity answered in the 3rd question}«",
-          `»${activity}«`
-        );
-        console.log(`[Backend] Replaced activity placeholder with: ${activity}`);
+        nextQuestion = nextQuestion.replace("»{activity answered in the 3rd question}«", `»${activity}«`);
+        console.log(`[Backend] Replaced activity placeholder with: "${activity}"`);
       }
 
-      console.log(`[Backend] Next step determined: ${nextStep}`);
-      console.log(`[Backend] Response message for next step (${nextStep}): ${responseMessage}`);
-
+      console.log(`[Backend] Proceeding to next step: "${nextStep}"`);
       return res.status(200).json({
         message: "Message processed successfully",
         data: {
-          openAIResponse: responseMessage,
+          openAIResponse: nextQuestion,
           nextStep,
           isEnd: nextStep === "end",
         },
       });
     } else {
-      // Invalid response; re-ask the same question
-      const responseMessage = `Your answer is not valid. Please try again: "${currentQuestion}"`;
-      console.log("[Backend] Invalid response. Asking user to try again.");
+      // Invalid response: Combine ChatGPT feedback with re-asking the question
+      const politeResponse = `${validationMessage}\n\nTo continue: ${currentQuestion}`;
+      console.log(`[Backend] Invalid response. Re-asking the question: "${currentStep}"`);
 
       return res.status(200).json({
         message: "Message processed successfully",
         data: {
-          openAIResponse: responseMessage,
-          nextStep: currentStep, // Stay on the current step
+          openAIResponse: politeResponse,
+          nextStep: currentStep,
           isEnd: false,
         },
       });
     }
   } catch (error) {
-    console.error("[Backend] Error during processing:", error);
+    console.error("[Backend] Error during message handling:", error.message);
     res.status(500).json({ message: "Internal Server Error." });
   }
 };
