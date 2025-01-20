@@ -16,6 +16,8 @@ const sendMessageService = require('./services/send_message');
 const saveAssessment = require('./services/assessment');
 const saveSelfAspects = require('./services/self_aspects');
 const getAssessment = require('./services/get_assessment');
+const getUserResponses = require('./services/get_conversation');
+
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -56,6 +58,9 @@ app.get('/assessment', getAssessment);
 
 // Self-Aspects Routes
 app.put('/self-aspects', saveSelfAspects);
+
+// Conversation Retrieval Route
+app.get('/conversation', getUserResponses);
 
 // Connect to MongoDB
 connectToMongoDB();

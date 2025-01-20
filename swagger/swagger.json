@@ -133,9 +133,23 @@
                                 },
                                 "message": {
                                     "type": "string"
+                                },
+                                "currentStep": {
+                                    "type": "string"
+                                },
+                                "history": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "role": { "type": "string" },
+                                            "content": { "type": "string" },
+                                            "step": { "type": "string" }
+                                        }
+                                    }
                                 }
                             },
-                            "required": ["userId", "message"]
+                            "required": ["userId", "message", "currentStep"]
                         }
                     }
                 ],
@@ -145,11 +159,14 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "message": {
-                                    "type": "string"
-                                },
+                                "message": { "type": "string" },
                                 "data": {
-                                    "type": "string"
+                                    "type": "object",
+                                    "properties": {
+                                        "openAIResponse": { "type": "string" },
+                                        "nextStep": { "type": "string" },
+                                        "isEnd": { "type": "boolean" }
+                                    }
                                 }
                             }
                         }
@@ -176,14 +193,10 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "userId": {
-                                    "type": "string"
-                                },
+                                "userId": { "type": "string" },
                                 "answers": {
                                     "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
+                                    "items": { "type": "string" }
                                 }
                             },
                             "required": ["userId", "answers"]
@@ -220,14 +233,10 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "message": {
-                                    "type": "string"
-                                },
+                                "message": { "type": "string" },
                                 "data": {
                                     "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
+                                    "items": { "type": "string" }
                                 }
                             }
                         }
@@ -254,14 +263,10 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "userId": {
-                                    "type": "string"
-                                },
+                                "userId": { "type": "string" },
                                 "aspects": {
                                     "type": "array",
-                                    "items": {
-                                        "type": "string"
-                                    }
+                                    "items": { "type": "string" }
                                 }
                             },
                             "required": ["userId", "aspects"]
@@ -278,6 +283,46 @@
                     "500": {
                         "description": "Internal server error"
                     }
+                }
+            }
+        },
+        "/conversation": {
+            "get": {
+                "summary": "Retrieve user conversation",
+                "description": "Fetches all responses for a given user",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "userId",
+                        "required": true,
+                        "type": "string",
+                        "description": "User ID to fetch the conversation for"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Conversation retrieved successfully",
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": { "type": "string" },
+                                "data": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "questionKey": { "type": "string" },
+                                            "response": { "type": "string" },
+                                            "timestamp": { "type": "string" }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": { "description": "Invalid user ID" },
+                    "404": { "description": "No conversation found" },
+                    "500": { "description": "Server error" }
                 }
             }
         }
