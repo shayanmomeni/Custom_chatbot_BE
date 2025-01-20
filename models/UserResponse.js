@@ -1,10 +1,11 @@
 const mongoose = require("mongoose");
 
-const UserResponseSchema = new mongoose.Schema({
+const userResponseSchema = new mongoose.Schema({
   userId: { type: String, required: true },
-  questionKey: { type: String, required: true }, // e.g., "yes_q4"
-  response: { type: String, required: true }, // e.g., "h", "a", etc.
+  questionKey: { type: String, required: true },
+  response: { type: String, required: true },
+  conversationId: { type: String, required: true }, // New field
   timestamp: { type: Date, default: Date.now },
 });
 
-module.exports = mongoose.model("UserResponse", UserResponseSchema);
+module.exports = mongoose.model("UserResponse", userResponseSchema);

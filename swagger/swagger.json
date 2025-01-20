@@ -33,23 +33,15 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "username": {
-                                    "type": "string"
-                                },
-                                "password": {
-                                    "type": "string"
-                                }
+                                "username": { "type": "string" },
+                                "password": { "type": "string" }
                             }
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Login successful"
-                    },
-                    "401": {
-                        "description": "Login failed"
-                    }
+                    "200": { "description": "Login successful" },
+                    "401": { "description": "Login failed" }
                 }
             }
         },
@@ -66,26 +58,16 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "username": {
-                                    "type": "string"
-                                },
-                                "password": {
-                                    "type": "string"
-                                },
-                                "fullName": {
-                                    "type": "string"
-                                }
+                                "username": { "type": "string" },
+                                "password": { "type": "string" },
+                                "fullName": { "type": "string" }
                             }
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Registration successful"
-                    },
-                    "400": {
-                        "description": "Registration failed"
-                    }
+                    "200": { "description": "Registration successful" },
+                    "400": { "description": "Registration failed" }
                 }
             }
         },
@@ -103,15 +85,9 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "User removed successfully"
-                    },
-                    "404": {
-                        "description": "User not found"
-                    },
-                    "500": {
-                        "description": "Database error"
-                    }
+                    "200": { "description": "User removed successfully" },
+                    "404": { "description": "User not found" },
+                    "500": { "description": "Database error" }
                 }
             }
         },
@@ -128,15 +104,9 @@
                         "schema": {
                             "type": "object",
                             "properties": {
-                                "userId": {
-                                    "type": "string"
-                                },
-                                "message": {
-                                    "type": "string"
-                                },
-                                "currentStep": {
-                                    "type": "string"
-                                },
+                                "userId": { "type": "string" },
+                                "message": { "type": "string" },
+                                "currentStep": { "type": "string" },
                                 "history": {
                                     "type": "array",
                                     "items": {
@@ -171,12 +141,8 @@
                             }
                         }
                     },
-                    "400": {
-                        "description": "Bad request - Missing fields"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
+                    "400": { "description": "Bad request - Missing fields" },
+                    "500": { "description": "Internal server error" }
                 }
             }
         },
@@ -204,15 +170,9 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Assessment saved successfully"
-                    },
-                    "400": {
-                        "description": "Invalid request data"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
+                    "200": { "description": "Assessment saved successfully" },
+                    "400": { "description": "Invalid request data" },
+                    "500": { "description": "Internal server error" }
                 }
             },
             "get": {
@@ -241,48 +201,8 @@
                             }
                         }
                     },
-                    "400": {
-                        "description": "Invalid request data"
-                    },
-                    "404": {
-                        "description": "User not found"
-                    }
-                }
-            }
-        },
-        "/self-aspects": {
-            "put": {
-                "summary": "Save Self-Aspects",
-                "description": "Saves the user's selected self-aspects",
-                "parameters": [
-                    {
-                        "in": "body",
-                        "name": "body",
-                        "description": "Self-aspects data",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "userId": { "type": "string" },
-                                "aspects": {
-                                    "type": "array",
-                                    "items": { "type": "string" }
-                                }
-                            },
-                            "required": ["userId", "aspects"]
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Self-aspects saved successfully"
-                    },
-                    "400": {
-                        "description": "Invalid request data"
-                    },
-                    "500": {
-                        "description": "Internal server error"
-                    }
+                    "400": { "description": "Invalid request data" },
+                    "404": { "description": "User not found" }
                 }
             }
         },
@@ -297,6 +217,13 @@
                         "required": true,
                         "type": "string",
                         "description": "User ID to fetch the conversation for"
+                    },
+                    {
+                        "in": "query",
+                        "name": "conversationId",
+                        "required": false,
+                        "type": "string",
+                        "description": "Optional conversation ID"
                     }
                 ],
                 "responses": {
@@ -320,7 +247,7 @@
                             }
                         }
                     },
-                    "400": { "description": "Invalid user ID" },
+                    "400": { "description": "Invalid user ID or conversation ID" },
                     "404": { "description": "No conversation found" },
                     "500": { "description": "Server error" }
                 }

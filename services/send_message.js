@@ -3,7 +3,7 @@ const { getNextStep, predefinedQuestions } = require("../shared/flow_logic");
 const { getChatGPTValidation } = require("../utils/chatgpt");
 
 const handleMessage = async (req, res) => {
-  const { message, userId, currentStep } = req.body;
+  const { message, userId, currentStep, conversationId } = req.body; // Added `conversationId`
 
   try {
     const currentQuestion = predefinedQuestions[currentStep];
@@ -21,13 +21,17 @@ const handleMessage = async (req, res) => {
     console.log(`[Backend] Is response valid: ${isValid}`);
 
     if (isValid) {
+      const generatedConversationId = conversationId || Date.now().toString(); // Generate conversationId if not provided
+
       // Save the valid response
       await UserResponse.findOneAndUpdate(
-        { userId, questionKey: currentStep },
+        { userId, questionKey: currentStep, conversationId: generatedConversationId }, // Include `conversationId`
         { response: message },
         { upsert: true, new: true }
       );
-      console.log(`[Backend] Saved valid response for step: "${currentStep}", response: "${message}"`);
+      console.log(
+        `[Backend] Saved valid response for step: "${currentStep}", response: "${message}", conversationId: "${generatedConversationId}"`
+      );
 
       // Get the next step and prepare the response
       const nextStep = getNextStep(currentStep, message);
@@ -38,6 +42,7 @@ const handleMessage = async (req, res) => {
         const activityResponse = await UserResponse.findOne({
           userId,
           questionKey: "yes_q3", // Fetching the response from step `yes_q3`
+          conversationId: generatedConversationId, // Match by `conversationId`
         });
 
         const activity = activityResponse?.response || "[activity not found]";
@@ -52,6 +57,7 @@ const handleMessage = async (req, res) => {
           openAIResponse: nextQuestion,
           nextStep,
           isEnd: nextStep === "end",
+          conversationId: generatedConversationId, // Return the conversationId
         },
       });
     } else {
@@ -65,6 +71,7 @@ const handleMessage = async (req, res) => {
           openAIResponse: politeResponse,
           nextStep: currentStep,
           isEnd: false,
+          conversationId, // Return the existing conversationId (if provided)
         },
       });
     }
