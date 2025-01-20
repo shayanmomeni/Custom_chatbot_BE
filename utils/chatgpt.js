@@ -1,40 +1,32 @@
-const OpenAI = require("openai");
+const axios = require("axios");
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-async function getChatGPTResponse(messages, currentStep) {
+const getChatGPTResponse = async (messages) => {
   try {
-    console.log("[ChatGPT] Sending request with messages:", JSON.stringify(messages, null, 2));
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4",
+        messages,
+        temperature: 0,
+        max_tokens: 50,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+      }
+    );
 
-    const systemMessage = `
-      You are a conversational assistant guiding users through a predefined flow of questions.
-      Current step: ${currentStep}.
-      Rules:
-      1. Follow the predefined flow exactly as provided below:
-      - awaiting_time_response: "Do you have time? Answer 'yes' or 'no'."
-      - yes_q1: "Great! What's your favorite hobby?"
-      - yes_q2: "Why do you enjoy this hobby?"
-      - no_q1: "That's fine. Is there something keeping you busy?"
-      - no_q2: "Would you like to share what's on your mind?"
-      2. Validate user responses against the expected flow.
-      3. If the user deviates, respond with a reminder to stay on track.
-    `;
-
-    const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [{ role: "system", content: systemMessage }, ...messages],
-      temperature: 0.7,
-      max_tokens: 1024,
-    });
-
-    console.log("[ChatGPT] Response received:", JSON.stringify(response, null, 2));
-    return response.choices[0]?.message?.content.trim();
+    if (response.data && response.data.choices && response.data.choices.length > 0) {
+      return response.data.choices[0].message.content.trim();
+    } else {
+      console.error("[ChatGPT] Invalid response format:", response.data);
+      return "invalid";
+    }
   } catch (error) {
-    console.error("[ChatGPT] Error occurred:", error.message);
-    throw new Error("Failed to fetch response from ChatGPT.");
+    console.error("[ChatGPT] Error during API call:", error);
+    return "invalid";
   }
-}
+};
 
 module.exports = { getChatGPTResponse };
