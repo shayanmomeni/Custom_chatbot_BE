@@ -1,9 +1,15 @@
+
 const UserResponse = require("../models/UserResponse");
 const { getNextStep, predefinedQuestions } = require("../shared/flow_logic");
 const { getChatGPTValidation } = require("../utils/chatgpt");
+const { getUserImages } = require("../utils/file_utils");
 
 const handleMessage = async (req, res) => {
-  const { message, userId, currentStep, conversationId } = req.body; // Added `conversationId`
+  const { message, userId, currentStep, conversationId } = req.body;
+
+  console.log(`[Backend] Received message: "${message}" for step: "${currentStep}"`);
+  console.log(`[Backend] Received userId: "${userId}"`);
+  console.log(`[Backend] Received conversationId: "${conversationId || "not provided"}"`);
 
   try {
     const currentQuestion = predefinedQuestions[currentStep];
@@ -12,43 +18,57 @@ const handleMessage = async (req, res) => {
       return res.status(400).json({ message: "Invalid current step." });
     }
 
-    console.log(`[Backend] Received message: "${message}" for step: "${currentStep}"`);
+    const generatedConversationId = conversationId || Date.now().toString();
 
-    // Validate response with ChatGPT
+    // Handle the image step
+    if (currentStep === "yes_q6") {
+      console.log(`[Backend] Fetching images for userId: "${userId}"`);
+      const images = getUserImages(userId);
+
+      if (images.length > 0) {
+        console.log(`[Backend] Found ${images.length} images for userId: "${userId}"`);
+        console.log(`[Backend] Image URLs:`, images);
+
+        return res.status(200).json({
+          message: "Message processed successfully",
+          data: {
+            openAIResponse: currentQuestion,
+            nextStep: "end",
+            isEnd: true,
+            images,
+            conversationId: generatedConversationId,
+          },
+        });
+      } else {
+        console.warn(`[Backend] No images found for userId: "${userId}"`);
+        return res.status(200).json({
+          message: "No images found for the user.",
+          data: {
+            nextStep: currentStep,
+            isEnd: false,
+            conversationId: generatedConversationId,
+          },
+        });
+      }
+    }
+
+    // Validation with ChatGPT
     const { validationMessage, isValid } = await getChatGPTValidation(currentQuestion, message);
 
     console.log(`[ChatGPT] Validation message: "${validationMessage}"`);
     console.log(`[Backend] Is response valid: ${isValid}`);
 
     if (isValid) {
-      const generatedConversationId = conversationId || Date.now().toString(); // Generate conversationId if not provided
-
-      // Save the valid response
       await UserResponse.findOneAndUpdate(
-        { userId, questionKey: currentStep, conversationId: generatedConversationId }, // Include `conversationId`
+        { userId, questionKey: currentStep, conversationId: generatedConversationId },
         { response: message },
         { upsert: true, new: true }
       );
-      console.log(
-        `[Backend] Saved valid response for step: "${currentStep}", response: "${message}", conversationId: "${generatedConversationId}"`
-      );
 
-      // Get the next step and prepare the response
+      console.log(`[Backend] Saved valid response for step: "${currentStep}"`);
+
       const nextStep = getNextStep(currentStep, message);
-      let nextQuestion = predefinedQuestions[nextStep] || "End of flow.";
-
-      // Handle dynamic placeholder replacement
-      if (nextStep === "yes_q6") {
-        const activityResponse = await UserResponse.findOne({
-          userId,
-          questionKey: "yes_q3", // Fetching the response from step `yes_q3`
-          conversationId: generatedConversationId, // Match by `conversationId`
-        });
-
-        const activity = activityResponse?.response || "[activity not found]";
-        nextQuestion = nextQuestion.replace("»{activity answered in the 3rd question}«", `»${activity}«`);
-        console.log(`[Backend] Replaced activity placeholder with: "${activity}"`);
-      }
+      const nextQuestion = predefinedQuestions[nextStep] || "End of flow.";
 
       console.log(`[Backend] Proceeding to next step: "${nextStep}"`);
       return res.status(200).json({
@@ -57,21 +77,19 @@ const handleMessage = async (req, res) => {
           openAIResponse: nextQuestion,
           nextStep,
           isEnd: nextStep === "end",
-          conversationId: generatedConversationId, // Return the conversationId
+          conversationId: generatedConversationId,
         },
       });
     } else {
-      // Invalid response: Combine ChatGPT feedback with re-asking the question
-      const politeResponse = `${validationMessage}\n\nTo continue: ${currentQuestion}`;
-      console.log(`[Backend] Invalid response. Re-asking the question: "${currentStep}"`);
+      console.log(`[Backend] Invalid response for step: "${currentStep}"`);
 
       return res.status(200).json({
         message: "Message processed successfully",
         data: {
-          openAIResponse: politeResponse,
+          openAIResponse: `${validationMessage}\n\nTo continue: ${currentQuestion}`,
           nextStep: currentStep,
           isEnd: false,
-          conversationId, // Return the existing conversationId (if provided)
+          conversationId,
         },
       });
     }

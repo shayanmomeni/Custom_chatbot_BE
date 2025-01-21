@@ -18,8 +18,7 @@ const predefinedQuestions = {
     f. Never, this is an exception
     h. I don't know how to answer that.`,
   yes_q5: "Would you say this is a routine for you? Something you regularly do in daily life?",
-  yes_q6: "So, you’re currently doing: »{activity answered in the 3rd question}«. Pick a decision within this activity that involves some degree of choice.",
-  yes_q7: "What options do you have within this decision? For example, what could you do? And what other options are there? Okay, what else could you do?",
+  yes_q6: "Here are the images. Please choose one from the following options:",
   end: "Thank you for the conversation. Have a great day!",
 };
 
@@ -38,9 +37,8 @@ const getNextStep = (currentStep, userResponse) => {
     yes_q2: () => "yes_q3",
     yes_q3: () => "yes_q4",
     yes_q4: () => "yes_q5",
-    yes_q5: () => "yes_q6",
-    yes_q6: () => "yes_q7",
-    yes_q7: () => "end",
+    yes_q5: () => "yes_q6", // Proceed to the image selection step
+    yes_q6: () => "end", // End after image selection
   };
 
   return flow[currentStep] ? flow[currentStep]() : "end";
@@ -71,3 +69,5 @@ const populateDynamicPlaceholders = async (nextStep, userId) => {
 };
 
 module.exports = { getNextStep, predefinedQuestions, populateDynamicPlaceholders };
+
+

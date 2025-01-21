@@ -91,62 +91,69 @@
                 }
             }
         },
-        "/send-message": {
-            "post": {
-                "summary": "Send Message",
-                "description": "Sends a user message and receives a mock response",
-                "parameters": [
-                    {
-                        "in": "body",
-                        "name": "body",
-                        "description": "Message details",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "userId": { "type": "string" },
-                                "message": { "type": "string" },
-                                "currentStep": { "type": "string" },
-                                "history": {
-                                    "type": "array",
-                                    "items": {
-                                        "type": "object",
-                                        "properties": {
-                                            "role": { "type": "string" },
-                                            "content": { "type": "string" },
-                                            "step": { "type": "string" }
-                                        }
-                                    }
-                                },
-                                "conversationId": { "type": "string" }
-                            },
-                            "required": ["userId", "message", "currentStep", "conversationId"]
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Message processed successfully",
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "message": { "type": "string" },
-                                "data": {
-                                    "type": "object",
-                                    "properties": {
-                                        "openAIResponse": { "type": "string" },
-                                        "nextStep": { "type": "string" },
-                                        "isEnd": { "type": "boolean" }
-                                    }
+      "/send-message": {
+    "post": {
+        "summary": "Send Message",
+        "description": "Sends a user message and receives a response. If the flow reaches an image selection step, it returns image URLs.",
+        "parameters": [
+            {
+                "in": "body",
+                "name": "body",
+                "description": "Message details",
+                "required": true,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "userId": { "type": "string" },
+                        "message": { "type": "string" },
+                        "currentStep": { "type": "string" },
+                        "history": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "role": { "type": "string" },
+                                    "content": { "type": "string" },
+                                    "step": { "type": "string" }
                                 }
                             }
-                        }
+                        },
+                        "conversationId": { "type": "string" }
                     },
-                    "400": { "description": "Bad request - Missing fields" },
-                    "500": { "description": "Internal server error" }
+                    "required": ["userId", "message", "currentStep", "conversationId"]
                 }
             }
+        ],
+        "responses": {
+            "200": {
+                "description": "Message processed successfully",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "message": { "type": "string" },
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "openAIResponse": { "type": "string" },
+                                "nextStep": { "type": "string" },
+                                "isEnd": { "type": "boolean" },
+                                "images": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Array of image URLs for the user to choose from (only included at the image selection step)."
+                                },
+                                "conversationId": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            },
+            "400": { "description": "Bad request - Missing fields" },
+            "500": { "description": "Internal server error" }
+        }
+    }
         },
+        
         "/assessment": {
             "put": {
                 "summary": "Save Assessment",
