@@ -1,34 +1,43 @@
 const axios = require("axios");
 
+const escapeRegExp = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // Escape special characters for RegEx
+};
+
 const getChatGPTValidation = async (currentQuestion, userResponse, currentStep) => {
   try {
     let validationPrompt = `
-      You are a friendly AI validator for a chatbot. Validate if the user's response is relevant and correctly answers the question:
-      "${currentQuestion}".
+      You are a friendly AI validator for a chatbot. Your job is to:
+      1. Validate if the user's response is relevant to the question: "${currentQuestion}".
+      2. If the response is valid, provide a **short, friendly reaction** before continuing.
+      3. If the response is incorrect but reasonable (e.g., talking about Shiraz when asked a different question), acknowledge it briefly and bring them back to the conversation.
+      4. If the response is completely off-topic or invalid, politely ask the user to try again.
+      5. If the user seems **confused** or asks **"What were we discussing?"**, **"What is the question?"**, or **"I don’t understand"**, **explain the question briefly and repeat it exactly as it was originally written**.
 
-      Respond in the following format:
-      - "Valid: [message]" if the response is correct.
-      - "Invalid: [polite explanation of why the response is invalid, guiding the user to answer appropriately]".
+      **IMPORTANT RULES:**
+      - AI must **NEVER** ask a question. **AI responses must NOT contain questions.**
+      - AI **must provide explanations if the user is confused.**
+      - AI **must repeat the last question exactly** after explaining.
+      - AI **must NOT rephrase or modify the chatbot’s predefined questions.**
+      - AI should use **positive reactions** and **emojis** to keep the conversation engaging.
 
-      Keep responses short and polite.
+      **Response Format:**
+      - If correct: "Valid: [Friendly reaction without a question]"
+        - Example: "Oh, dancing is awesome! 🎶💃 That sounds fun!"
+      - If off-topic but reasonable: "Friendly: [Acknowledge response but NO question]"
+        - Example: "Shiraz is a beautiful city! 🌇 But let's stay on track."
+      - If invalid: "Invalid: [Polite explanation but NO question]"
+        - Example: "Hmm, that doesn't quite answer. 😊 Let's try again."
+      - If user is confused or asks for clarification: "Confused: [Brief explanation of the question] [Repeat the exact predefined question]"
+
+      **EXAMPLES OF CONFUSION RESPONSES:**
+      - **User:** "What were we talking about?"  
+        **AI:** "It seems like you're a little lost. 😊 We were discussing choices within your current activity. Let’s go back to it: **What are you doing?**"
+      - **User:** "What is the question?"  
+        **AI:** "No worries! Let me clarify. This question is about selecting a specific option within your activity. Here it is again: **Pick a choice within this activity that has a wider range of options.**"
+      - **User:** "I don’t understand"  
+        **AI:** "I’m happy to clarify! 😊 This question asks you to describe the different possibilities within your activity. Here it is again: **What options do you have within this choice?**"
     `;
-
-    // Enforce Yes/No validation for Question 8
-    if (currentStep === "yes_q8") {
-      validationPrompt += `
-      Important: This question only accepts responses like "Yes" or "No" (or slight variations like "yeah", "nope", etc.).
-      If the user's response is not a variation of "Yes" or "No", return:
-      "Invalid: Please answer with 'Yes' or 'No' to continue."
-      `;
-    }
-
-    // Ensure logical consistency for Self-aspect-related questions
-    if (["yes_q9", "yes_q10", "yes_q11", "yes_q12", "yes_q13", "yes_q14", "yes_q15", "yes_q16"].includes(currentStep)) {
-      validationPrompt += `
-      For this question, ensure the user is staying on topic and providing a relevant, meaningful response.
-      If the response lacks explanation, ask politely for clarification.
-      `;
-    }
 
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -39,8 +48,8 @@ const getChatGPTValidation = async (currentQuestion, userResponse, currentStep) 
           { role: "assistant", content: `Question: "${currentQuestion}"` },
           { role: "user", content: userResponse },
         ],
-        temperature: 1,
-        max_tokens: 300,
+        temperature: 1.1, // Keep creativity but ensure consistency
+        max_tokens: 250,
       },
       {
         headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
@@ -48,17 +57,49 @@ const getChatGPTValidation = async (currentQuestion, userResponse, currentStep) 
     );
 
     if (response.data && response.data.choices.length > 0) {
-      let feedback = response.data.choices[0].message.content.trim();
-      feedback = feedback.replace(/^Invalid:\s*/i, "").replace(/^Valid:\s*/i, "");
+      let feedback = response.data.choices[0]?.message?.content?.trim();
 
-      const isValid = response.data.choices[0].message.content.toLowerCase().startsWith("valid:");
+      if (!feedback) {
+        console.error("[ChatGPT] Error: Unexpected API response structure.");
+        return { validationMessage: "Oops! Something went wrong. Please try again. 🤖", isValid: false };
+      }
+
+      // **🔹 Fix: Remove any AI-generated questions**
+      feedback = feedback.replace(/\?[^.]*$/, "").trim(); // Remove AI-added questions
+
+      // **Remove classification labels (Friendly, Invalid, Valid, Confused)**
+      feedback = feedback.replace(/^Invalid:\s*/i, "").replace(/^Valid:\s*/i, "").replace(/^Friendly:\s*/i, "").replace(/^Confused:\s*/i, "");
+
+      // **Escape special characters from `currentQuestion` before using in RegEx**
+      const escapedCurrentQuestion = escapeRegExp(currentQuestion);
+      feedback = feedback.replace(new RegExp(`\\b${escapedCurrentQuestion}\\b`, "gi"), "").trim();
+
+      const isValid = response.data.choices[0]?.message?.content?.toLowerCase()?.startsWith("valid:");
+      const isFriendly = response.data.choices[0]?.message?.content?.toLowerCase()?.startsWith("friendly:");
+      const isConfused = response.data.choices[0]?.message?.content?.toLowerCase()?.startsWith("confused:");
+
+      if (isConfused) {
+        return {
+          validationMessage: feedback,
+          isValid: false, // Keep user on the same step, but clarify the question
+        };
+      }
+
+      if (isFriendly) {
+        return {
+          validationMessage: feedback, 
+          isValid: false, // Keep user on the same step, but with a friendly response
+        };
+      }
+
       return { validationMessage: feedback, isValid };
     } else {
-      return { validationMessage: "Unable to process your response.", isValid: false };
+      console.error("[ChatGPT] Error: Empty response from API.");
+      return { validationMessage: "Hmm, I'm having trouble understanding that. 😊 Could you try again?", isValid: false };
     }
   } catch (error) {
     console.error("[ChatGPT] Error during API call:", error.message);
-    return { validationMessage: "Something went wrong during validation.", isValid: false };
+    return { validationMessage: "Oops! Something went wrong. Please try again. 🤖", isValid: false };
   }
 };
 
