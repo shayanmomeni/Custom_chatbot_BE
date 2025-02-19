@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 
-// Ensure that BASE_URL is loaded from environment variables
 const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
 
 const getUserImages = (userId) => {

@@ -9,8 +9,13 @@ const { getChatGPTValidation } = require("../utils/chatgpt");
 const { getUserImages } = require("../utils/file_utils");
 
 const handleMessage = async (req, res) => {
-  const { message, userId, currentStep, conversationId } = req.body;
+  let { message, userId, currentStep, conversationId } = req.body;
   console.log(`[Backend] Received message: "${message}" for step: "${currentStep}"`);
+
+  // Map legacy step "awaiting_time_response" to the new initial step "B2"
+  if (currentStep === "awaiting_time_response") {
+    currentStep = "B2";
+  }
 
   try {
     // 1. Validate we have a question for this step
@@ -33,8 +38,8 @@ const handleMessage = async (req, res) => {
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
-            openAIResponse: currentQuestion,      // No placeholder needed
-            nextStep: "yes_q8",                  // Move to next step
+            openAIResponse: currentQuestion, // No placeholder needed
+            nextStep: "yes_q8",               // Move to next step
             isEnd: false,
             images,
             conversationId: generatedConversationId,
@@ -58,7 +63,7 @@ const handleMessage = async (req, res) => {
     console.log(`[ChatGPT] Validation message: "${validationMessage}"`);
     console.log(`[Backend] Is response valid: ${isValid}`);
 
-    // 3.1. **Sanitize ChatGPT's validation message** in case it echoed {activity}
+    // 3.1. Sanitize ChatGPT's validation message in case it echoed {activity}
     if (validationMessage.includes("{activity}")) {
       try {
         // Fetch the user's activity from yes_q2, same logic as in populateDynamicPlaceholders
