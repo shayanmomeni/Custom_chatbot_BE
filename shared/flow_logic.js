@@ -33,10 +33,7 @@ const predefinedQuestions = {
 };
 
 const getNextStep = (currentStep, userResponse) => {
-  // Map legacy step "awaiting_time_response" to the new initial step "B2"
-  if (currentStep === "awaiting_time_response") {
-    currentStep = "B2";
-  }
+  console.log(`[Flow Logic] Current Step: ${currentStep}, User Response: ${userResponse}`);
 
   const flow = {
     B2: () => userResponse.toLowerCase().trim() === "yes" ? "C1" : "Z1",
@@ -49,9 +46,8 @@ const getNextStep = (currentStep, userResponse) => {
     E2: () => "F",
     F: () => "G",
     G: () => "H",
-    H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "H2",
+    H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "I", // Directly go to "I" instead of "H2"
     H1: () => "I1",
-    H2: () => "I",
     I1: () => "W",
     I: () => "W",
     // Branch B: No general disagreement.
@@ -69,14 +65,52 @@ const getNextStep = (currentStep, userResponse) => {
     Z1: () => "end"
   };
 
-  return flow[currentStep] ? flow[currentStep]() : "end";
+  const nextStep = flow[currentStep] ? flow[currentStep]() : "end";
+  console.log(`[Flow Logic] Next Step: ${nextStep}`);
+  return nextStep;
 };
 
 const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => {
   try {
     const template = predefinedQuestions[nextStep];
     if (!template) return "End of flow.";
-    // No dynamic placeholders needed for the new flow.
+
+    console.log(`[Flow Logic] Populating template for step: ${nextStep}`);
+
+    // Overview steps that require dynamic placeholders
+    if (["I1", "I", "I3", "I4"].includes(nextStep)) {
+      const userResponse = await UserResponse.findOne({ userId, conversationId });
+      
+      if (userResponse) {
+        // Determine the final idea based on the flow rules
+        let finalIdea = "No final idea available";
+
+        if (userResponse.brainstormedIdea) {
+          finalIdea = userResponse.brainstormedIdea;
+        } else if (userResponse.prioritizedOption) {
+          finalIdea = userResponse.prioritizedOption;
+        } else if (userResponse.alignedOption) {
+          finalIdea = userResponse.alignedOption;
+        } else if (userResponse.optionForSelfAspect) {
+          finalIdea = userResponse.optionForSelfAspect;
+        }
+
+        const filledTemplate = template
+          .replace("[User's decision]", userResponse.decision || "No decision provided")
+          .replace("[Options listed]", userResponse.options?.join(", ") || "No options provided")
+          .replace("[Names provided]", userResponse.selfAspects?.join(", ") || "No self-aspects mentioned")
+          .replace("[User's feelings]", userResponse.feelings || "No feelings shared")
+          .replace("[Brainstormed Idea]", finalIdea)
+          .replace("[Prioritized self-aspect's option]", finalIdea);
+
+        console.log(`[Flow Logic] Populated Template: ${filledTemplate}`);
+        return filledTemplate;
+      } else {
+        console.warn("[Flow Logic] No user response data found for dynamic placeholders.");
+        return "It seems like there wasn't enough information to generate the overview.";
+      }
+    }
+
     return template;
   } catch (error) {
     console.error("[Flow Logic] Error in populateDynamicPlaceholders:", error.message);
