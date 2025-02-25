@@ -1,5 +1,4 @@
 // controllers/send_message.js
-
 const UserResponse = require("../models/UserResponse");
 const {
   getNextStep,
@@ -9,35 +8,34 @@ const {
 } = require("../shared/flow_logic");
 const { getChatGPTValidation } = require("../utils/chatgpt");
 const { getUserAspectsAndImages } = require("../utils/file_utils");
+const { aggregateConversation } = require("../services/aggregate_conversation");
 
 async function handleMessage(req, res) {
   let { message, userId, currentStep, conversationId } = req.body;
   console.log(`[Backend] Received message: "${message}" for step: "${currentStep}"`);
 
-  // 1. Convert "awaiting_time_response" -> "B2"
+  // Convert "awaiting_time_response" -> "B2" if needed.
   if (currentStep === "awaiting_time_response") {
     currentStep = "B2";
   }
 
   try {
-    // 2. Ensure step is defined
     const hasStep = Object.prototype.hasOwnProperty.call(predefinedQuestions, currentStep);
     if (!hasStep) {
       console.error("[Backend] Invalid current step:", currentStep);
       return res.status(400).json({ message: "Invalid current step." });
     }
 
-    // 3. Fallback for B2 so GPT sees a question
     let currentQuestion = predefinedQuestions[currentStep] ?? "";
     if (currentStep === "B2" && !currentQuestion.trim()) {
       currentQuestion = "Would you like to reflect on a decision now? Please answer yes or no.";
     }
     console.log(`[Backend] currentQuestion for step ${currentStep}: "${currentQuestion}"`);
 
-    // 4. Reuse or generate conversationId
+    // Generate or reuse conversationId.
     const generatedConversationId = conversationId || Date.now().toString();
 
-    // 5. GPT Validation
+    // GPT Validation
     console.log(`[Backend] Using GPT for step "${currentStep}" validation.`);
     const { validationMessage, isValid } = await getChatGPTValidation(
       currentQuestion,
@@ -46,9 +44,8 @@ async function handleMessage(req, res) {
     );
     console.log(`[ChatGPT] validationMessage: "${validationMessage}" | isValid: ${isValid}`);
 
-    // 6. If valid
     if (isValid) {
-      // 6a. Store user response
+      // Store the user response.
       await UserResponse.findOneAndUpdate(
         { userId, questionKey: currentStep, conversationId: generatedConversationId },
         { response: message },
@@ -58,11 +55,10 @@ async function handleMessage(req, res) {
         `[Backend] Stored valid response for step "${currentStep}" under conversation "${generatedConversationId}"`
       );
 
-      // 6b. Next step
+      // Determine the next step.
       const nextStep = getNextStep(currentStep, message);
       console.log(`[Flow Logic] nextStep from ${currentStep}: "${nextStep}"`);
 
-      // End?
       if (nextStep === "end") {
         return res.status(200).json({
           message: "Message processed successfully",
@@ -75,14 +71,12 @@ async function handleMessage(req, res) {
         });
       }
 
-      // === NEW: If next step is D => show images one step earlier ===
+      // For step D, return images along with the question.
       if (nextStep === "D") {
         console.log(`[Backend] Next step is "D", returning aspect images earlier...`);
         const aspectImagePairs = getUserAspectsAndImages(userId);
 
-        let nextQuestion = predefinedQuestions["D"] 
-          || "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)";
-
+        let nextQuestion = predefinedQuestions["D"] || "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)";
         nextQuestion = await populateDynamicPlaceholders("D", userId, generatedConversationId);
 
         return res.status(200).json({
@@ -97,11 +91,9 @@ async function handleMessage(req, res) {
         });
       }
 
-      // If next step is E => we no longer show images here, because we did it at D.
-      // If you want to keep them, you can—but presumably we removed it.
-
-      // If next step is an overview step => show final reflection
+      // For Overview steps, update aggregation and then generate the overview.
       if (["I1", "I", "I3", "I4"].includes(nextStep)) {
+        await aggregateConversation(generatedConversationId, userId);
         const overviewText = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
         const finalReflection = FINAL_REFLECTION || "Any reflections on how you feel now?";
 
@@ -116,7 +108,7 @@ async function handleMessage(req, res) {
         });
       }
 
-      // Otherwise => standard next question
+      // For all other steps, generate the next question.
       let nextQuestion = "End of flow.";
       if (predefinedQuestions[nextStep]) {
         nextQuestion = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
@@ -133,7 +125,7 @@ async function handleMessage(req, res) {
       });
     }
 
-    // 7. If invalid or confused => remain on same step
+    // If validation fails, remain on the current step.
     console.log(`[Backend] Invalid/Confused => remain on step: "${currentStep}"`);
     return res.status(200).json({
       message: "Message processed successfully",

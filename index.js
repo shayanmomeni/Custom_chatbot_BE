@@ -31,6 +31,8 @@ const saveSelfAspects = require("./services/self_aspects");
 const getAssessment = require("./services/get_assessment");
 const getUserResponses = require("./services/get_user_responses");
 const getConversation = require("./services/get_conversation");
+const getConversationSummary = require("./services/get_conversation_summary");
+
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -84,6 +86,9 @@ app.put("/self-aspects", saveSelfAspects);
 // Conversation Retrieval Route
 app.get("/userresponses", getUserResponses);
 app.get("/conversation", getConversation);
+
+// this route to retrieve conversation summaries with full conversation details.
+app.get("/conversation-summary", getConversationSummary);
 
 // Connect to MongoDB
 connectToMongoDB();
