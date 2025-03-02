@@ -1,4 +1,3 @@
-// services/aggregate_conversation.js
 const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
 
@@ -11,13 +10,13 @@ const Conversation = require("../models/Conversation");
  * Key fields:
  *  - decision: from step C1.
  *  - options: from step C2.
- *  - selfAspects: from Branch A (steps E/E1) and Branch B (steps K and O).
- *    • For Branch A, the self-aspects come from question E.
- *    • For Branch B, the self-aspects are parsed from K and O.
- *  - feelings: from step F (or L if F is missing).
- *  - finalIdea: For Branch A, from H1 (or H2/I1/I); for Branch B, from P (or I3/I4/N if P is not provided).
- *    Branch A is preferred if available; otherwise Branch B.
- *  - branch: set to "A" if step D was answered "yes", "B" if "no".
+ *  - selfAspects: from Branch A (E/E1/E2) or Branch B (K/O, etc.).
+ *  - feelings: from step F (or L if F not provided).
+ *  - finalIdea:
+ *    -- If user says “no” at H => we take G’s answer.
+ *    -- If user says “yes” at H => we use H1 as the final idea.
+ *    -- If Branch B => from P, N, I3, I4, etc.
+ *  - branch: "A" if user said “yes” at D, otherwise "B”.
  */
 async function aggregateConversation(conversationId, userId) {
   try {
@@ -26,14 +25,18 @@ async function aggregateConversation(conversationId, userId) {
 
     let decision = "";
     let options = [];
-    let selfAspects = []; // Array of objects: { aspectName, preference }
+    let selfAspects = [];
     let feelings = "";
     let finalIdeaA = "";
     let finalIdeaB = "";
-    let branch = ""; // "A" for yes flow, "B" for no flow
+    let branch = ""; // "A" if D=yes, "B" if D=no
+
+    // We'll track G’s answer, for use if user says "no" at H
+    let prioritizedAspectAnswer = "";
 
     for (const resp of responses) {
       const { questionKey, response } = resp;
+
       switch (questionKey) {
         case "C1":
           decision = response;
@@ -47,8 +50,9 @@ async function aggregateConversation(conversationId, userId) {
         case "D":
           branch = response.toLowerCase().trim() === "yes" ? "A" : "B";
           break;
+
+        // Branch A
         case "E":
-          // Branch A: capture self-aspects as provided in E.
           if (response.includes("prefers")) {
             const parts = response.split(/[,;]+/);
             parts.forEach(part => {
@@ -62,28 +66,49 @@ async function aggregateConversation(conversationId, userId) {
             });
           } else {
             response.split(/[,;]+/).forEach(a => {
-              if (a.trim().length) selfAspects.push({ aspectName: a.trim(), preference: "" });
+              if (a.trim().length) {
+                selfAspects.push({ aspectName: a.trim(), preference: "" });
+              }
             });
           }
           break;
         case "E1":
-          // For Branch A, we may update details if provided.
-          // Here we choose NOT to override E so that the overview shows the original self-aspects.
+        case "E2":
+          // Additional clarifications, no major changes to selfAspects
           break;
+
         case "F":
           feelings = response;
           break;
-        case "L":
-          if (!feelings) feelings = response;
+        case "G":
+          prioritizedAspectAnswer = response;
+          break;
+
+        // CHANGED:
+        // If user says "no" at H => finalIdeaA = G
+        // If user says "yes" => aggregator expects final idea at H1
+        case "H":
+          if (response.toLowerCase().trim() === "no") {
+            finalIdeaA = prioritizedAspectAnswer;
+          }
           break;
         case "H1":
-        case "H2":
-        case "I1":
+          finalIdeaA = response; 
+          break;
+
         case "I":
-          finalIdeaA = response;
+        case "I1":
+          // Possibly an extra final idea typed at the overview
+          if (!finalIdeaA) {
+            finalIdeaA = response;
+          }
+          break;
+
+        // Branch B
+        case "J":
+          // yes => K, no => O
           break;
         case "K":
-          // Branch B: parse self-aspect info from K.
           if (response.toLowerCase().includes("self")) {
             const match = response.match(/(.*?self)\s*(?:because)?\s*(.*)/i);
             if (match) {
@@ -95,29 +120,34 @@ async function aggregateConversation(conversationId, userId) {
             finalIdeaB = response;
           }
           break;
-        case "O":
-          // Branch B primary self-aspect.
-          if (response && response.trim().length > 0) {
-            let aspectName = response.replace(/^(with\s+)?(my\s+)?/i, "").trim();
-            if (aspectName && !selfAspects.find(sa => sa.aspectName.toLowerCase() === aspectName.toLowerCase())) {
-              selfAspects.push({ aspectName, preference: "" });
-            }
-          }
+        case "L":
+          if (!feelings) feelings = response;
           break;
-        case "P":
-          // Branch B: final idea from P.
+        case "N":
           finalIdeaB = response;
           break;
         case "I3":
         case "I4":
-        case "N":
+        case "P":
           finalIdeaB = response;
+          break;
+        case "O":
+          if (response && response.trim().length > 0) {
+            let aspectName = response.replace(/^(with\s+)?(my\s+)?/i, "").trim();
+            if (
+              aspectName &&
+              !selfAspects.find(sa => sa.aspectName.toLowerCase() === aspectName.toLowerCase())
+            ) {
+              selfAspects.push({ aspectName, preference: "" });
+            }
+          }
           break;
         default:
           break;
       }
     }
 
+    // Combine final ideas from A/B
     const finalIdea = finalIdeaA || finalIdeaB || "";
 
     const conversationData = {

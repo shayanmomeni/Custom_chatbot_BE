@@ -1,4 +1,3 @@
-// controllers/send_message.js
 const UserResponse = require("../models/UserResponse");
 const {
   getNextStep,
@@ -32,14 +31,19 @@ async function handleMessage(req, res) {
 
     const generatedConversationId = conversationId || Date.now().toString();
 
-    // Track attempt count (assuming attemptCount field exists)
-    let existingResponse = await UserResponse.findOne({ userId, questionKey: currentStep, conversationId: generatedConversationId });
+    // Track attempt count
+    let existingResponse = await UserResponse.findOne({
+      userId,
+      questionKey: currentStep,
+      conversationId: generatedConversationId
+    });
     let attemptCount = 1;
     if (existingResponse) {
       attemptCount = (existingResponse.attemptCount || 1) + 1;
     }
     console.log(`[Backend] Attempt Count for step ${currentStep}: ${attemptCount}`);
 
+    // Validate with GPT
     console.log(`[Backend] Using GPT for step "${currentStep}" validation.`);
     const { validationMessage, isValid } = await getChatGPTValidation(
       currentQuestion,
@@ -72,17 +76,17 @@ async function handleMessage(req, res) {
         });
       }
 
-      // If next step is D, return aspect images early.
+      // If next step is D, we send aspect images
       if (nextStep === "D") {
         console.log(`[Backend] Next step is "D", returning aspect images...`);
         const aspectImagePairs = getUserAspectsAndImages(userId);
-        let nextQuestion = predefinedQuestions["D"] ||
+        let nextQuestionD = predefinedQuestions["D"] ||
           "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)";
-        nextQuestion = await populateDynamicPlaceholders("D", userId, generatedConversationId);
+        nextQuestionD = await populateDynamicPlaceholders("D", userId, generatedConversationId);
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
-            openAIResponse: nextQuestion.trim(),
+            openAIResponse: nextQuestionD.trim(),
             aspects: aspectImagePairs,
             nextStep: "D",
             isEnd: false,
@@ -91,7 +95,7 @@ async function handleMessage(req, res) {
         });
       }
 
-      // For overview steps, use aggregated conversation data.
+      // If it's an overview step
       if (["I1", "I", "I3", "I4"].includes(nextStep)) {
         const overviewText = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
         const finalReflection = FINAL_REFLECTION ||
@@ -107,15 +111,16 @@ async function handleMessage(req, res) {
         });
       }
 
-      // Otherwise, standard next question.
-      let nextQuestion = "End of flow.";
+      // Otherwise normal question
+      let nextQuestionText = "End of flow.";
       if (predefinedQuestions[nextStep]) {
-        nextQuestion = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
+        nextQuestionText = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
       }
+
       return res.status(200).json({
         message: "Message processed successfully",
         data: {
-          openAIResponse: `${validationMessage} ${nextQuestion}`.trim(),
+          openAIResponse: `${validationMessage} ${nextQuestionText}`.trim(),
           nextStep,
           isEnd: nextStep === "end",
           conversationId: generatedConversationId
@@ -123,6 +128,7 @@ async function handleMessage(req, res) {
       });
     }
 
+    // If invalid, remain on current step
     console.log(`[Backend] Invalid/Confused => remain on step: "${currentStep}"`);
     return res.status(200).json({
       message: "Message processed successfully",

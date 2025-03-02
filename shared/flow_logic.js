@@ -1,4 +1,3 @@
-// shared/flow_logic.js
 const mongoose = require("mongoose");
 const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
@@ -13,6 +12,12 @@ const exampleVariationsC2 = [
 const FINAL_REFLECTION =
   "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
 
+/**
+ * IMPORTANT CHANGE (Two-step approach):
+ * - Step H is now purely yes/no: "Would you like to brainstorm an alternative?"
+ * - If user says "yes" => go to H1 => user shares new idea => aggregator sets final idea
+ * - If user says "no" => aggregator uses G answer, then jump to overview (I).
+ */
 const predefinedQuestions = {
   B2: "",
   C1: "What decision are you thinking about right now? (For example, are you planning to go grocery shopping?)",
@@ -23,19 +28,26 @@ const predefinedQuestions = {
   E2: "Can you also share what reasons these self-aspects have for not preferring the option favored by another?",
   F: "How do you feel about having these different views inside you? What does that feel like?",
   G: "In your present situation, which self-aspect feels more important or has higher priority than the others? Tell me why.",
-  H: "Taking your prioritized self-aspect into account, would you like to brainstorm an alternative that might help balance these views? Please share your idea if you have one. (If not, we'll use the option favored by your prioritized self-aspect.)",
-  H1: "Final Idea set to the brainstormed option.",
-  H2: "Final Idea set to the option favored by your prioritized self-aspect.",
+
+  // CHANGED: H is purely yes/no
+  H: "Would you like to brainstorm a new idea that might help balance these views? (Yes/No)",
+
+  // CHANGED: H1 is where the user actually provides the brainstormed idea
+  H1: "Please share the new idea or action that balances your prioritized self-aspect with the others.",
+
   I1: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Brainstormed Idea]",
   I: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Prioritized self-aspect's option]",
+
   J: "If the decision does not create a disagreement among your self-aspects as a whole, does it still clash with one particular self-aspect? (Yes/No)",
   K: "Can you name the self-aspect and tell me why it disagrees? What would it prefer to do instead, and why?",
   L: "How does it feel to notice this difference?",
   N: "What other option will better align with that self-aspect's needs and why?",
   I3: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Brainstormed Idea]",
   O: "It sounds like your decision and options align well with your self-aspects. With which one of your self-aspects does this decision align most, and why?",
+  P1: "",
   P: "Which option out of the three would that self-aspect choose, and why?",
   I4: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Chosen option by most aligned self-aspect]",
+
   W: "Reflection placeholder. This is handled in send_message.js to display 2 messages in a row.",
   X: "End: Thanks for chatting and reflecting with me. Good luck with your decision!",
   Z1: "End: No worries, feel free to come back anytime!"
@@ -52,12 +64,21 @@ const getNextStep = (currentStep, userResponse) => {
     E1: () => "E2",
     E2: () => "F",
     F: () => "G",
+
+    /**
+     * CHANGED: Step H is strictly yes/no
+     * If "yes" => go to H1 => user shares brainstorm
+     * If "no" => skip to I => aggregator uses G as final idea
+     */
     G: () => "H",
-    H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "H2",
+    H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "I",
     H1: () => "I1",
-    H2: () => "I",
+
+    // Overviews
     I1: () => "W",
     I: () => "W",
+
+    // Branch B
     J: () => userResponse.toLowerCase().trim() === "yes" ? "K" : "O",
     K: () => "L",
     L: () => "N",
@@ -67,10 +88,12 @@ const getNextStep = (currentStep, userResponse) => {
     P1: () => "P",
     P: () => "I4",
     I4: () => "W",
+
     W: () => "X",
     X: () => "end",
     Z1: () => "end"
   };
+
   const nextStep = flow[currentStep] ? flow[currentStep]() : "end";
   console.log(`[Flow Logic] Next Step: ${nextStep}`);
   return nextStep;
@@ -88,8 +111,8 @@ const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => 
       template = template.replace("[EXAMPLE_C2]", randomExample);
     }
 
+    // For overview steps, we populate from aggregated conversation data
     if (["I1", "I", "I3", "I4"].includes(nextStep)) {
-      // Trigger aggregation so that a Conversation document is created/updated.
       await aggregateConversation(conversationId, userId);
       const conversationDoc = await Conversation.findOne({ userId, conversationId });
       if (conversationDoc) {
@@ -104,7 +127,9 @@ const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => 
         }
         template = template
           .replace("[User's decision]", conversationDoc.decision || "No decision provided")
-          .replace("[Options listed]", (conversationDoc.options && conversationDoc.options.length) ? conversationDoc.options.join(", ") : "No options provided")
+          .replace("[Options listed]", (conversationDoc.options && conversationDoc.options.length)
+            ? conversationDoc.options.join(", ")
+            : "No options provided")
           .replace("[Self-aspects]", selfAspectsStr)
           .replace("[User's feelings]", conversationDoc.feelings || "No feelings shared")
           .replace("[Brainstormed Idea]", finalIdea)
