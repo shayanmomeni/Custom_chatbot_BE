@@ -24,7 +24,7 @@ async function handleMessage(req, res) {
       return res.status(400).json({ message: "Invalid current step." });
     }
 
-    let currentQuestion = predefinedQuestions[currentStep] ?? "";
+    let currentQuestion = predefinedQuestions[currentStep] || "";
     if (currentStep === "B2" && !currentQuestion.trim()) {
       currentQuestion = "Would you like to reflect on a decision now? Please answer yes or no.";
     }
@@ -32,7 +32,7 @@ async function handleMessage(req, res) {
 
     const generatedConversationId = conversationId || Date.now().toString();
 
-    // Determine attemptCount by checking if a response already exists for this question in this conversation.
+    // Track attempt count (assuming attemptCount field exists)
     let existingResponse = await UserResponse.findOne({ userId, questionKey: currentStep, conversationId: generatedConversationId });
     let attemptCount = 1;
     if (existingResponse) {
@@ -50,7 +50,6 @@ async function handleMessage(req, res) {
     console.log(`[ChatGPT] validationMessage: "${validationMessage}" | isValid: ${isValid}`);
 
     if (isValid) {
-      // Store or update the response along with attemptCount.
       await UserResponse.findOneAndUpdate(
         { userId, questionKey: currentStep, conversationId: generatedConversationId },
         { response: message, attemptCount },
@@ -73,11 +72,12 @@ async function handleMessage(req, res) {
         });
       }
 
-      // If next step is D, return aspect images.
+      // If next step is D, return aspect images early.
       if (nextStep === "D") {
         console.log(`[Backend] Next step is "D", returning aspect images...`);
         const aspectImagePairs = getUserAspectsAndImages(userId);
-        let nextQuestion = predefinedQuestions["D"] || "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)";
+        let nextQuestion = predefinedQuestions["D"] ||
+          "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)";
         nextQuestion = await populateDynamicPlaceholders("D", userId, generatedConversationId);
         return res.status(200).json({
           message: "Message processed successfully",
@@ -94,7 +94,8 @@ async function handleMessage(req, res) {
       // For overview steps, use aggregated conversation data.
       if (["I1", "I", "I3", "I4"].includes(nextStep)) {
         const overviewText = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
-        const finalReflection = FINAL_REFLECTION || "Any reflections on how you feel now?";
+        const finalReflection = FINAL_REFLECTION ||
+          "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
@@ -106,7 +107,7 @@ async function handleMessage(req, res) {
         });
       }
 
-      // Otherwise, use standard next question.
+      // Otherwise, standard next question.
       let nextQuestion = "End of flow.";
       if (predefinedQuestions[nextStep]) {
         nextQuestion = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
