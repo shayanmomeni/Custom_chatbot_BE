@@ -7,29 +7,24 @@ const axios = require("axios");
  * This function validates the user's answer for a given step in our decision-reflection chatbot.
  *
  * Project Overview:
- *   Our project, "Decent Chatbot", guides users through a structured conversation about their decisions.
- *   For each step, the user's response must meet a specific requirement (for example, a yes/no answer,
- *   a brief decision, a personal reflection, or the mentioning of at least two self-aspects with an action).
+ *   "Decent Chatbot" guides users through a structured conversation about their decisions.
+ *   For each step, your role is to check if the user's answer meets the specific requirements.
  *
- * Your Role as the Validator:
- *   - If the user's response fully meets the requirement, you must reply EXACTLY with "NEXT".
- *   - If the response is off-topic, too vague, or incomplete, provide a short, friendly prompt that guides
- *     the user to improve their answer. Do not include any internal details or technical terms (like "step E").
+ * General Rules:
+ *   - If the user's answer meets the step requirement, reply EXACTLY with "NEXT".
+ *   - Otherwise, reply with a short, friendly prompt to guide the user.
  *   - Accept minor typos, synonyms, and variations.
  *   - If attemptCount > 1, be more lenient.
  *
- * Step-Specific Rules:
- *   - B2: The answer must be "yes" or "no".
- *   - C1: Accept any short decision (e.g., "eating", "shopping").
+ * Step-Specific Instructions:
+ *   - B2: Must answer "yes" or "no".
+ *   - C1: Accept any brief decision (e.g. "eating", "shopping").
  *   - D: Must answer "yes" or "no".
- *   - E: The answer must mention at least two distinct self-aspects (using synonyms like "side" or "part" is acceptable)
- *        along with a brief action or plan for each.
- *   - F: The answer must be a genuine personal description of the user's feelings (e.g., "I feel bad...", "it feels strange...").
- *   - X: This is the final step; any answer is accepted.
- *
- * Global Rule:
- *   Always provide exactly one response. If the answer meets the step requirement, reply "NEXT".
- *   Otherwise, provide a short, user-friendly message to help the user improve their answer.
+ *   - E: The answer must mention at least TWO distinct self-aspects along with an associated action/plan.
+ *   - F: The answer must be a genuine personal reflection (e.g. "I feel bad…", "it feels strange…").
+ *   - H: The user is asked whether they want to brainstorm an alternative.
+ *        *If the user answers "no" (i.e. no brainstormed idea), reply EXACTLY with "NEXT" (do not include any extra text).
+ *   - X: This is the final step; accept any user input and reply EXACTLY with "NEXT".
  */
 async function getChatGPTValidation({
   currentQuestion,
@@ -45,12 +40,12 @@ async function getChatGPTValidation({
       stepSpecificPrompt = `
         The user must answer "yes" or "no" (case-insensitive).
         If valid, reply EXACTLY "NEXT".
-        Otherwise, provide a short friendly prompt asking for a yes/no answer.
+        Otherwise, provide a short friendly prompt.
       `;
     } else if (currentStep === "C1") {
       stepSpecificPrompt = `
-        Accept any brief answer that indicates a decision (e.g. "eating", "shopping", "studying").
-        If the answer is relevant, reply EXACTLY "NEXT".
+        Accept any brief answer that indicates a decision (e.g., "eating", "shopping", "studying").
+        If relevant, reply EXACTLY "NEXT".
       `;
     } else if (currentStep === "D") {
       stepSpecificPrompt = `
@@ -62,17 +57,25 @@ async function getChatGPTValidation({
       const aspectListStr = userAspects.join(", ") || "none listed";
       stepSpecificPrompt = `
         The user has these custom self-aspects: ${aspectListStr}.
-        They must mention at least TWO distinct self-aspects along with an associated action or plan
-        (using synonyms such as "wants to", "would like to", "prefers to", "asks", etc.).
+        They must mention at least TWO distinct self-aspects along with an associated action or plan 
+        (using synonyms like "prefers to", "wants to", "would like to", etc.).
         If this is done, reply EXACTLY "NEXT".
-        Otherwise, provide a short friendly prompt asking them to clearly mention at least two aspects and what each intends to do.
+        Otherwise, provide a short friendly prompt asking them to clearly mention at least two aspects with their actions.
       `;
     } else if (currentStep === "F") {
       stepSpecificPrompt = `
         For step F, the user must describe their personal feelings about having conflicting views.
-        Accept any sincere, personal description (e.g. "I feel bad", "it feels strange").
+        Accept any sincere personal reflection (e.g., "I feel bad", "it feels strange").
         If the response is genuine, reply EXACTLY "NEXT".
-        Otherwise, provide a short prompt encouraging a personal reflection.
+        Otherwise, provide a short prompt encouraging a personal description.
+      `;
+    } else if (currentStep === "H") {
+      // IMPORTANT: For step H, if the user answers "no" (indicating no brainstormed idea),
+      // the reply MUST be exactly "NEXT" with no extra text.
+      stepSpecificPrompt = `
+        For step H, if the user answers "no" (i.e., they do not provide a brainstormed idea), 
+        reply EXACTLY "NEXT" without any extra text.
+        If they provide a brainstormed idea, ensure that the response is acceptable and then reply "NEXT".
       `;
     } else if (currentStep === "X") {
       stepSpecificPrompt = `
@@ -88,12 +91,14 @@ async function getChatGPTValidation({
     const validationPrompt = `
       You are an AI validator for "Decent Chatbot", a decision-reflection chatbot that guides users through a structured conversation.
       
-      Your role is to check whether the user's response meets the specific requirements for each step.
+      Your role is to validate the user's answer for each step.
       
       Project Context:
-      - The chatbot asks questions about a decision the user is facing and requests personal reflections.
-      - For each step, if the response meets the requirement, you must reply EXACTLY "NEXT".
-      - Otherwise, you provide a short, friendly prompt to help the user improve their answer.
+      - The chatbot asks predefined questions to help the user reflect on their decision.
+      - If the user's answer meets the step requirement, you must reply EXACTLY "NEXT".
+      - Otherwise, provide a short, friendly prompt (with an example if needed) to guide the user.
+      - Minor typos, synonyms, and varied writing styles are acceptable.
+      - For attemptCount > 1, be more lenient.
       
       Current Step: "${currentStep}"
       Question: "${currentQuestion}"
@@ -101,10 +106,8 @@ async function getChatGPTValidation({
       Attempt Count: ${attemptCount}
       
       Global Rules:
-      1) If the user's answer meets the requirement for this step, reply EXACTLY "NEXT".
-      2) Otherwise, reply with a short, friendly guidance message (including an example if appropriate) to help the user improve.
-      3) Accept minor typos, synonyms, and variations in phrasing.
-      4) If attemptCount > 1, be more lenient.
+      1) If the user's answer fully meets the requirement for this step, reply EXACTLY "NEXT".
+      2) Otherwise, reply with a short, friendly guidance message.
       
       ${repeatNote}
       ${stepSpecificPrompt}
