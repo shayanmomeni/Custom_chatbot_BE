@@ -13,19 +13,7 @@ const exampleVariationsC2 = [
 const FINAL_REFLECTION =
   "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
 
-/**
- * stripFinalIdea
- *
- * Removes common leading phrases like "prefers to", "wants to", or "would like to" 
- * so that the final idea shows only the core option.
- */
-function stripFinalIdea(text) {
-  if (!text) return text;
-  return text
-    .replace(/^(prefers to|wants to|would like to)\s*/i, "")
-    .trim();
-}
-
+// Updated question for H
 const predefinedQuestions = {
   B2: "",
   C1: "What decision are you thinking about right now? (For example, are you planning to go grocery shopping?)",
@@ -38,10 +26,10 @@ const predefinedQuestions = {
   E2: "Can you also share what reasons these self-aspects have for not preferring the option favored by another?",
   F: "How do you feel about having these different views inside you? What does that feel like?",
   G: "In your present situation, which self-aspect feels more important or has higher priority than the others? Tell me why.",
-  H: "Taking your prioritized self-aspect into account, would you like to brainstorm an alternative that might help balance these views? Please share your idea if you have one. (If not, we'll use the option favored by your prioritized self-aspect.)",
+  H: "Taking your prioritized self-aspect into account, can you think of an alternative that might help make both self-aspects happier? If yes, what is the alternative option and how can this make both self-aspects happier? (If not, we'll conclude with the option favored by your prioritized self-aspect.)",
   H1: "Final Idea set to the brainstormed option.",
 
-  I1: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
+  I1: `Thank you for your responses. Below I will present you an overview of our conversation:\n\nYour Decision: [User's decision]\n\nYour Options: [Options listed]\n\nYour Involved Self-aspects: [Self-aspects]\n\nYour Feelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
   I: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Prioritized self-aspect's option]`,
 
   // Branch B
@@ -76,8 +64,7 @@ const getNextStep = (currentStep, userResponse) => {
     E2: () => "F",
     F: () => "G",
     G: () => "H",
-    // If user says "yes" at H => H1 => I1 => W => X
-    // If user says "no" at H => I => W => X
+    // For H: if answer is "yes" then go to H1, else go to I
     H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "I",
     H1: () => "I1",
     I1: () => "W",
@@ -124,15 +111,12 @@ const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => 
           ? convo.options.join(", ")
           : "Not defined";
         let feelings = convo.feelings || "Not defined";
-        // Use stripFinalIdea to clean final idea
         let finalIdea = convo.finalIdea ? stripFinalIdea(convo.finalIdea) : "Not defined";
-        
-        // Only show aspect names (not preferences) for involved self-aspects
+
+        // For "Involved Self-aspects", only list aspect names.
         let selfAspectsStr = "No self-aspects mentioned";
         if (convo.selfAspects && convo.selfAspects.length) {
-          selfAspectsStr = convo.selfAspects
-            .map(sa => sa.aspectName)
-            .join(", ");
+          selfAspectsStr = convo.selfAspects.map(sa => sa.aspectName).join(", ");
         }
 
         template = template
@@ -158,12 +142,18 @@ const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => 
 
 /**
  * stripFinalIdea
- * 
+ *
  * Removes leading phrases like "prefers to", "wants to", or "would like to" from final idea text.
  */
 function stripFinalIdea(text) {
   if (!text) return text;
-  return text.replace(/^(prefers to|wants to|would like to)\s*/i, "").trim();
+  let cleaned = text.replace(/^(prefers to|wants to|would like to)\s*/i, "").trim();
+  return capitalizeFirst(cleaned);
+}
+
+function capitalizeFirst(str) {
+  if (!str) return str;
+  return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 module.exports = {

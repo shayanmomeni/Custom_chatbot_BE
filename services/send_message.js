@@ -1,4 +1,5 @@
 // controllers/send_message.js
+
 const UserResponse = require("../models/UserResponse");
 const {
   getNextStep,
@@ -13,6 +14,7 @@ async function handleMessage(req, res) {
   let { message, userId, currentStep, conversationId } = req.body;
   console.log(`[Backend] Received message: "${message}" for step: "${currentStep}"`);
 
+  // If the client starts with "awaiting_time_response", map it to B2
   if (currentStep === "awaiting_time_response") {
     currentStep = "B2";
   }
@@ -25,6 +27,7 @@ async function handleMessage(req, res) {
     }
 
     let currentQuestion = predefinedQuestions[currentStep] || "";
+    // B2 might be blank in predefinedQuestions, so we fallback
     if (currentStep === "B2" && !currentQuestion.trim()) {
       currentQuestion = "Would you like to reflect on a decision now? Please answer yes or no.";
     }
@@ -58,6 +61,7 @@ async function handleMessage(req, res) {
     console.log(`[ChatGPT] validationMessage: "${validationMessage}" | isValid: ${isValid}`);
 
     if (isValid) {
+      // store user response
       await UserResponse.findOneAndUpdate(
         { userId, questionKey: currentStep, conversationId: generatedConversationId },
         { response: message, attemptCount },
@@ -69,10 +73,11 @@ async function handleMessage(req, res) {
       console.log(`[Flow Logic] nextStep from ${currentStep}: "${nextStep}"`);
 
       if (nextStep === "end") {
+        // Return final thank you message from predefinedQuestions["X"]
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
-            openAIResponse: "",
+            openAIResponse: predefinedQuestions["X"],
             nextStep,
             isEnd: true,
             conversationId: generatedConversationId
@@ -80,11 +85,12 @@ async function handleMessage(req, res) {
         });
       }
 
+      // If next step is D => return aspect images
       if (nextStep === "D") {
-        console.log(`[Backend] Next step is "D", returning aspect images...`);
-        let nextQuestionD = predefinedQuestions["D"] || "Does this decision bring up any disagreement?";
+        console.log(`[Backend] Next step "D", returning aspect images...`);
+        let nextQuestionD = predefinedQuestions["D"] ||
+          "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)";
         nextQuestionD = await populateDynamicPlaceholders("D", userId, generatedConversationId);
-
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
@@ -97,6 +103,7 @@ async function handleMessage(req, res) {
         });
       }
 
+      // If next step is an overview => reflection
       if (["I1", "I", "I3", "I4"].includes(nextStep)) {
         const overviewText = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
         const finalReflection = FINAL_REFLECTION ||
