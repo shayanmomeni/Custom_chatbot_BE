@@ -4,14 +4,32 @@ const axios = require("axios");
 /**
  * getChatGPTValidation
  *
- * Accepts userAspects (an array of aspect names) for dynamic validation.
+ * This function validates the user's answer for a given step in our decision-reflection chatbot.
  *
- * Global Rules:
- *  1) If the user addresses the question well => EXACTLY "NEXT"
- *  2) If incomplete => short, user-friendly guidance (with an example). No mention of “step E” or “off-topic.”
- *  3) "Let me clarify..." only if the user is obviously confused.
- *  4) Minor typos are okay. The user doesn't need literal words like "prefers."
- *  5) If attemptCount > 1 => be more lenient if on-topic => "NEXT".
+ * Project Overview:
+ *   Our project, "Decent Chatbot", guides users through a structured conversation about their decisions.
+ *   For each step, the user's response must meet a specific requirement (for example, a yes/no answer,
+ *   a brief decision, a personal reflection, or the mentioning of at least two self-aspects with an action).
+ *
+ * Your Role as the Validator:
+ *   - If the user's response fully meets the requirement, you must reply EXACTLY with "NEXT".
+ *   - If the response is off-topic, too vague, or incomplete, provide a short, friendly prompt that guides
+ *     the user to improve their answer. Do not include any internal details or technical terms (like "step E").
+ *   - Accept minor typos, synonyms, and variations.
+ *   - If attemptCount > 1, be more lenient.
+ *
+ * Step-Specific Rules:
+ *   - B2: The answer must be "yes" or "no".
+ *   - C1: Accept any short decision (e.g., "eating", "shopping").
+ *   - D: Must answer "yes" or "no".
+ *   - E: The answer must mention at least two distinct self-aspects (using synonyms like "side" or "part" is acceptable)
+ *        along with a brief action or plan for each.
+ *   - F: The answer must be a genuine personal description of the user's feelings (e.g., "I feel bad...", "it feels strange...").
+ *   - X: This is the final step; any answer is accepted.
+ *
+ * Global Rule:
+ *   Always provide exactly one response. If the answer meets the step requirement, reply "NEXT".
+ *   Otherwise, provide a short, user-friendly message to help the user improve their answer.
  */
 async function getChatGPTValidation({
   currentQuestion,
@@ -23,81 +41,78 @@ async function getChatGPTValidation({
   try {
     let stepSpecificPrompt = "";
 
-    /**
-     * Example Step B2: user must say “yes” or “no”
-     */
     if (currentStep === "B2") {
       stepSpecificPrompt = `
         The user must answer "yes" or "no" (case-insensitive).
-        If valid => EXACTLY "NEXT".
-        Otherwise => a short, user-friendly prompt asking them to say yes/no clearly.
+        If valid, reply EXACTLY "NEXT".
+        Otherwise, provide a short friendly prompt asking for a yes/no answer.
       `;
-    }
-    /**
-     * Example Step C1: any short decision is fine
-     */
-    else if (currentStep === "C1") {
+    } else if (currentStep === "C1") {
       stepSpecificPrompt = `
-        Accept any brief answer that indicates a decision (e.g. "dance", "shopping", "studying", "eating").
-        If they provide any relevant decision => EXACTLY "NEXT".
+        Accept any brief answer that indicates a decision (e.g. "eating", "shopping", "studying").
+        If the answer is relevant, reply EXACTLY "NEXT".
       `;
-    }
-    /**
-     * Step E: user must mention at least TWO aspects from userAspects,
-     * each with some form of action or desire. They don't need to say "prefers" literally.
-     */
-    else if (currentStep === "E") {
-      const aspectListStr = userAspects.join(", ") || "no stored aspects";
+    } else if (currentStep === "D") {
+      stepSpecificPrompt = `
+        The user must answer "yes" or "no" (case-insensitive).
+        If valid, reply EXACTLY "NEXT".
+        Otherwise, provide a short prompt asking for a yes/no answer.
+      `;
+    } else if (currentStep === "E") {
+      const aspectListStr = userAspects.join(", ") || "none listed";
       stepSpecificPrompt = `
         The user has these custom self-aspects: ${aspectListStr}.
-        They must mention at least TWO of these aspects AND indicate an action, desire, or decision for each one.
-        
-        For example, "My selfish aspect wants my mom to cook" and "My confident aspect likes to try new restaurants."
-        They do NOT have to use the exact word "prefers"; synonyms like "wants," "would like," "chose," or "asks" are okay.
-        
-        If they do => EXACTLY "NEXT".
-        Otherwise => provide a short user-friendly prompt like:
-        "It looks like you didn't clearly mention two of your self-aspects or their actions. 
-         Could you share at least two aspects and what each one does or wants? For example..."
-         
-        Avoid referencing step codes or saying 'off-topic.' Just be natural.
+        They must mention at least TWO distinct self-aspects along with an associated action or plan
+        (using synonyms such as "wants to", "would like to", "prefers to", "asks", etc.).
+        If this is done, reply EXACTLY "NEXT".
+        Otherwise, provide a short friendly prompt asking them to clearly mention at least two aspects and what each intends to do.
+      `;
+    } else if (currentStep === "F") {
+      stepSpecificPrompt = `
+        For step F, the user must describe their personal feelings about having conflicting views.
+        Accept any sincere, personal description (e.g. "I feel bad", "it feels strange").
+        If the response is genuine, reply EXACTLY "NEXT".
+        Otherwise, provide a short prompt encouraging a personal reflection.
+      `;
+    } else if (currentStep === "X") {
+      stepSpecificPrompt = `
+        This is the final step. Accept any user input and reply EXACTLY "NEXT" without further prompting.
       `;
     }
-    // Add more steps if needed...
 
-    // Additional note for repeated attempts
     let repeatNote = "";
     if (attemptCount > 1) {
-      repeatNote = `
-        This is attemptCount = ${attemptCount}.
-        If the user is basically on-topic (two aspects + any action),
-        accept by replying "NEXT".
-      `;
+      repeatNote = `If basically correct, reply "NEXT".`;
     }
 
     const validationPrompt = `
-      You are a helpful AI validator for a chatbot.
-
+      You are an AI validator for "Decent Chatbot", a decision-reflection chatbot that guides users through a structured conversation.
+      
+      Your role is to check whether the user's response meets the specific requirements for each step.
+      
+      Project Context:
+      - The chatbot asks questions about a decision the user is facing and requests personal reflections.
+      - For each step, if the response meets the requirement, you must reply EXACTLY "NEXT".
+      - Otherwise, you provide a short, friendly prompt to help the user improve their answer.
+      
       Current Step: "${currentStep}"
       Question: "${currentQuestion}"
       User Answer: "${userResponse}"
       Attempt Count: ${attemptCount}
-
+      
       Global Rules:
-      1) If the user's answer fully meets the requirement => EXACTLY "NEXT".
-      2) If incomplete => short, friendly guidance (include an example).
-      3) If user is confused => "Let me clarify..." + explanation, then repeat the question.
-      4) Minor typos or synonyms are okay; no strict demand for "prefers."
-      5) If attemptCount > 1 => be more lenient if it's basically correct => "NEXT".
-
+      1) If the user's answer meets the requirement for this step, reply EXACTLY "NEXT".
+      2) Otherwise, reply with a short, friendly guidance message (including an example if appropriate) to help the user improve.
+      3) Accept minor typos, synonyms, and variations in phrasing.
+      4) If attemptCount > 1, be more lenient.
+      
       ${repeatNote}
       ${stepSpecificPrompt}
-
-      Provide EXACTLY one response now, following these instructions.
+      
+      Provide EXACTLY one response.
     `;
 
-    // Call GPT
-    const response = await axios.post(
+    const responseGPT = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: "gpt-4",
@@ -109,40 +124,34 @@ async function getChatGPTValidation({
         presence_penalty: 0
       },
       {
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` }
       }
     );
 
-    if (!response.data?.choices?.length) {
-      console.error("[ChatGPT] Error: No choices in response.");
+    if (!responseGPT.data?.choices?.length) {
+      console.error("[ChatGPT] Error: No choices from GPT.");
       return { validationMessage: "Something went wrong (no GPT output).", isValid: false };
     }
 
-    const feedback = response.data.choices[0].message?.content?.trim() || "";
-    if (!feedback) {
-      console.error("[ChatGPT] Error: Empty GPT content.");
-      return { validationMessage: "Couldn't process your answer (GPT empty).", isValid: false };
-    }
-
+    const feedback = responseGPT.data.choices[0].message?.content?.trim() || "";
     console.log(`[ChatGPT] Raw feedback: "${feedback}"`);
 
-    // If GPT says EXACTLY "NEXT", user is good
+    if (!feedback) {
+      console.error("[ChatGPT] Error: GPT feedback is empty.");
+      return { validationMessage: "Empty GPT response.", isValid: false };
+    }
+
     if (feedback === "NEXT") {
       return { validationMessage: "", isValid: true };
     }
-    // If GPT starts "Let me clarify", user is confused
     if (feedback.toLowerCase().startsWith("let me clarify")) {
       return { validationMessage: feedback, isValid: false };
     }
-    // Otherwise, it's a short user-friendly message
     return { validationMessage: feedback, isValid: false };
 
   } catch (error) {
     console.error("[ChatGPT] Error in validation:", error.message);
-    return {
-      validationMessage: "Something went wrong with GPT. Please try again.",
-      isValid: false
-    };
+    return { validationMessage: "GPT validation error. Please try again.", isValid: false };
   }
 }
 

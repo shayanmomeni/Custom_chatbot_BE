@@ -1,14 +1,9 @@
+// services/aggregate_conversation.js
+
 const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
+const { parseAspectsWithGPT } = require("./parse_aspects_gpt");
 
-/**
- * aggregateConversation
- *
- * Aggregates individual UserResponse docs into a single Conversation doc.
- * 
- * Key update: We improved "parseAspectsAndPreferences" so that if the user says things
- * like "while my confident aspect prefers to go out," it strips "while", "my", etc.
- */
 async function aggregateConversation(conversationId, userId) {
   try {
     const responses = await UserResponse.find({ conversationId, userId }).sort({ timestamp: 1 });
@@ -20,7 +15,7 @@ async function aggregateConversation(conversationId, userId) {
     let feelings = "";
     let finalIdeaA = "";
     let finalIdeaB = "";
-    let branch = ""; // "A" if user said yes at D, else "B"
+    let branch = ""; // "A" if D was yes, else "B"
 
     let prioritizedAspectAnswer = "";
     let prioritizedAspectName = "";
@@ -31,149 +26,115 @@ async function aggregateConversation(conversationId, userId) {
 
       switch (questionKey) {
         case "C1":
-          // e.g. "eating"
-          if (trimmedResp) decision = trimmedResp;
+          decision = trimmedResp;
           break;
-
         case "C2":
-          // e.g. "// I cook, ask mum, go restaurent"
-          {
-            const arr = trimmedResp
-              .split(/[,;]+/)
-              .map(opt => opt.trim())
-              .filter(opt => opt.length > 0);
+          if (trimmedResp) {
+            const arr = trimmedResp.split(/[,;]+/).map(x => x.trim()).filter(x => x);
             if (arr.length) options = arr;
           }
           break;
-
         case "D":
-          // "yes" => branch A, "no" => branch B
           branch = trimmedResp.toLowerCase() === "yes" ? "A" : "B";
           break;
 
-        /* ---------------------------
-         * BRANCH A (D => yes)
-         * --------------------------- */
+        // Branch A
         case "E":
-          // e.g. "while my selfish aspect ask mum to cook, my confident aspect prefer go out"
-          parseAspectsAndPreferences(trimmedResp, selfAspects);
+          // use GPT to parse aspects from entire user text
+          {
+            const gptAspects = await parseAspectsWithGPT(trimmedResp);
+            // push each extracted aspect into selfAspects
+            gptAspects.forEach(a => {
+              selfAspects.push({
+                aspectName: a.aspectName || "aspect",
+                preference: a.preference || ""
+              });
+            });
+          }
           break;
-
         case "E1":
         case "E2":
-          // additional clarifications, not stored
+          // clarifications
           break;
-
         case "F":
-          // how the user feels about having these different views
-          if (trimmedResp) feelings = trimmedResp;
+          feelings = trimmedResp;
           break;
-
         case "G":
-          // user’s prioritized self-aspect
           prioritizedAspectAnswer = trimmedResp;
+          // We might want GPT-based parse again, but for now we do a quick match
           {
-            // attempt to find "selfish aspect" or "confident aspect" in user text
-            let matchG = trimmedResp.match(/(selfish|confident|shy|laziness|[^\s]+ aspect)/i);
-            if (matchG) {
-              prioritizedAspectName = matchG[0].trim().toLowerCase();
+            let match = trimmedResp.match(/(selfish|confident|shy|laziness|[^\s]+ aspect)/i);
+            if (match) {
+              prioritizedAspectName = match[0].trim().toLowerCase();
             }
           }
           break;
-
         case "H":
-          // If user says "no" => final idea is from G's aspect or text
+          // "no" => final idea from G's aspect
           if (trimmedResp.toLowerCase() === "no") {
-            let matchedAspect = null;
-            if (prioritizedAspectName && selfAspects.length) {
-              matchedAspect = selfAspects.find(sa =>
-                sa.aspectName.toLowerCase().includes(prioritizedAspectName)
-              );
-            }
+            let matchedAspect = findAspectByName(selfAspects, prioritizedAspectName);
             if (matchedAspect && matchedAspect.preference) {
-              finalIdeaA = matchedAspect.preference;
+              finalIdeaA = stripPreface(matchedAspect.preference);
             } else {
-              finalIdeaA = prioritizedAspectAnswer;
+              finalIdeaA = "";
             }
           }
           break;
-
         case "H1":
           // user’s brainstormed idea
           if (trimmedResp) finalIdeaA = trimmedResp;
           break;
-
         case "I":
         case "I1":
-          // final idea might appear here if we never set finalIdeaA
           if (!finalIdeaA && trimmedResp) finalIdeaA = trimmedResp;
           break;
 
-        /* ---------------------------
-         * BRANCH B (D => no)
-         * --------------------------- */
+        // Branch B
         case "J":
-          // yes => K, no => O
           break;
-
         case "K":
-          // e.g. "my shy self aspect doesn't want to go out"
-          if (trimmedResp.toLowerCase().includes("self")) {
-            const match = trimmedResp.match(/(.*?self)\s*(?:because)?\s*(.*)/i);
-            if (match) {
-              const aspectName = match[1].trim();
-              const preference = match[2].trim();
-              selfAspects.push({ aspectName, preference });
+          // if you want GPT-based parse, you can do parseAspectsWithGPT
+          // or if you prefer old logic, keep it
+          {
+            const gptAspects = await parseAspectsWithGPT(trimmedResp);
+            if (gptAspects.length > 0) {
+              gptAspects.forEach(a => {
+                selfAspects.push({
+                  aspectName: a.aspectName || "aspect",
+                  preference: a.preference || ""
+                });
+              });
+            } else {
+              // fallback to old approach
+              finalIdeaB = trimmedResp;
             }
-          } else {
-            // fallback
-            if (trimmedResp) finalIdeaB = trimmedResp;
           }
           break;
-
         case "L":
-          // if user didn't fill F, store here
-          if (!feelings && trimmedResp) feelings = trimmedResp;
+          if (!feelings) feelings = trimmedResp;
           break;
-
         case "N":
-          if (trimmedResp) finalIdeaB = trimmedResp;
+          finalIdeaB = trimmedResp;
           break;
-
         case "I3":
-        case "I4":
-        case "P":
           if (trimmedResp) finalIdeaB = trimmedResp;
           break;
-
         case "O":
-          // user alignment aspect?
-          if (trimmedResp) {
-            let aspectName = trimmedResp.replace(/^(with\s+)?(my\s+)?/i, "").trim();
-            if (
-              aspectName &&
-              !selfAspects.find(sa => sa.aspectName.toLowerCase() === aspectName.toLowerCase())
-            ) {
-              selfAspects.push({ aspectName, preference: "" });
-            }
-          }
+          // similarly we might parse with GPT or keep old logic
           break;
-
-        case "P1":
-          // If you want to store how user feels about alignment
-          // e.g. feelings += `[Alignment] ${trimmedResp}`;
-          // or do nothing if not needed
+        case "P":
+          finalIdeaB = trimmedResp;
           break;
-
+        case "I4":
+          finalIdeaB = trimmedResp;
+          break;
         default:
           break;
       }
     }
 
-    // Combine final ideas from branch A or B
     const finalIdea = finalIdeaA || finalIdeaB || "";
-
-    // If user never provided these fields => store as empty
+    // fill defaults
     if (!decision) decision = "";
     if (!feelings) feelings = "";
 
@@ -189,63 +150,53 @@ async function aggregateConversation(conversationId, userId) {
       createdAt: new Date()
     };
 
-    // upsert the conversation doc
     const conversation = await Conversation.findOneAndUpdate(
       { conversationId, userId },
       conversationData,
       { upsert: true, new: true }
     );
-
     return conversation;
-  } catch (error) {
-    console.error("[Aggregate Conversation] Error:", error.message);
-    throw error;
+  } catch (err) {
+    console.error("[Aggregate Conversation] Error:", err.message);
+    throw err;
   }
 }
 
 /**
- * parseAspectsAndPreferences
- *
- * Splits the user's text by commas and tries to parse aspectName + preference.
- * Now we remove leading "while", "and", "but", etc. to handle strings like
- * "while my confident aspect prefers ... "
+ * findAspectByName
+ * 
+ * Tries to find a self-aspect by partial name (like "confident")
  */
-function parseAspectsAndPreferences(resp, selfAspectsArray) {
-  // remove leading "//" and trim
-  let cleaned = resp.replace(/^\/\/\s*/, "").trim();
+function findAspectByName(selfAspects, aspectNameLower) {
+  if (!aspectNameLower) return null;
+  return selfAspects.find(sa =>
+    aspectNameLower.includes(sa.aspectName.toLowerCase()) ||
+    sa.aspectName.toLowerCase().includes(aspectNameLower)
+  );
+}
 
-  // split by commas
-  const parts = cleaned.split(/[,;]+/);
+/**
+ * stripPreface
+ * 
+ * If preference is "prefers to go to a restaurant", we return "go to a restaurant".
+ * If preference is "wants to do X", we return "do X".
+ */
+function stripPreface(pref = "") {
+  let txt = pref.trim().toLowerCase();
 
-  parts.forEach(part => {
-    let trimPart = part.trim();
+  // remove leading "prefers to", "wants to"
+  txt = txt.replace(/^prefers to\s*/i, "");
+  txt = txt.replace(/^wants to\s*/i, "");
+  // etc. you can add more synonyms
+  // possibly remove "likes to" or "would like to"
 
-    // remove possible filler words at the start, e.g. "while", "and", "but"
-    trimPart = trimPart.replace(/^while\s+/i, "");
-    trimPart = trimPart.replace(/^and\s+/i, "");
-    trimPart = trimPart.replace(/^but\s+/i, "");
-    // remove leading "my "
-    trimPart = trimPart.replace(/^my\s+/i, "");
+  // return capitalized
+  return capitalizeFirst(txt);
+}
 
-    // attempt to find "confident aspect", "selfish aspect", etc.
-    let matchAspect = trimPart.match(/(selfish|confident|shy|laziness|[^\s]+ aspect)/i);
-    let aspectName = matchAspect ? matchAspect[0].trim() : "aspect";
-
-    // remove aspectName from the text => remainder is preference
-    let remainder = trimPart.replace(aspectName, "").trim();
-
-    // also remove leading "my" from aspectName if present
-    aspectName = aspectName.replace(/^my\s+/i, "").trim();
-
-    // remove leftover "my" or slashes from remainder
-    remainder = remainder.replace(/^my\s+/i, "").replace(/^\/\//, "").trim();
-
-    // store
-    selfAspectsArray.push({
-      aspectName,
-      preference: remainder || ""
-    });
-  });
+function capitalizeFirst(str) {
+  if (!str) return str;
+  return str[0].toUpperCase() + str.slice(1);
 }
 
 module.exports = { aggregateConversation };
