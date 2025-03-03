@@ -4,19 +4,10 @@ const Conversation = require("../models/Conversation");
 /**
  * aggregateConversation
  *
- * Aggregates individual UserResponse documents for a given conversation
- * (identified by conversationId and userId) into a Conversation document.
- *
- * Key fields:
- *  - decision: from step C1.
- *  - options: from step C2.
- *  - selfAspects: from Branch A (E/E1/E2) or Branch B (K/O, etc.).
- *  - feelings: from step F (or L if F not provided).
- *  - finalIdea:
- *    -- If user says “no” at H => we take G’s answer.
- *    -- If user says “yes” at H => we use H1 as the final idea.
- *    -- If Branch B => from P, N, I3, I4, etc.
- *  - branch: "A" if user said “yes” at D, otherwise "B”.
+ * Aggregates individual UserResponse docs into a single Conversation doc.
+ * 
+ * Key update: We improved "parseAspectsAndPreferences" so that if the user says things
+ * like "while my confident aspect prefers to go out," it strips "while", "my", etc.
  */
 async function aggregateConversation(conversationId, userId) {
   try {
@@ -29,111 +20,136 @@ async function aggregateConversation(conversationId, userId) {
     let feelings = "";
     let finalIdeaA = "";
     let finalIdeaB = "";
-    let branch = ""; // "A" if D=yes, "B" if D=no
+    let branch = ""; // "A" if user said yes at D, else "B"
 
-    // We'll track G’s answer, for use if user says "no" at H
     let prioritizedAspectAnswer = "";
+    let prioritizedAspectName = "";
 
     for (const resp of responses) {
       const { questionKey, response } = resp;
+      const trimmedResp = response.trim();
 
       switch (questionKey) {
         case "C1":
-          decision = response;
-          break;
-        case "C2":
-          options = response
-            .split(/[,;]+/)
-            .map(opt => opt.trim())
-            .filter(opt => opt.length > 0);
-          break;
-        case "D":
-          branch = response.toLowerCase().trim() === "yes" ? "A" : "B";
+          // e.g. "eating"
+          if (trimmedResp) decision = trimmedResp;
           break;
 
-        // Branch A
-        case "E":
-          if (response.includes("prefers")) {
-            const parts = response.split(/[,;]+/);
-            parts.forEach(part => {
-              const [name, ...prefParts] = part.split("prefers");
-              if (name && prefParts.length) {
-                selfAspects.push({
-                  aspectName: name.trim(),
-                  preference: prefParts.join("prefers").trim()
-                });
-              }
-            });
-          } else {
-            response.split(/[,;]+/).forEach(a => {
-              if (a.trim().length) {
-                selfAspects.push({ aspectName: a.trim(), preference: "" });
-              }
-            });
+        case "C2":
+          // e.g. "// I cook, ask mum, go restaurent"
+          {
+            const arr = trimmedResp
+              .split(/[,;]+/)
+              .map(opt => opt.trim())
+              .filter(opt => opt.length > 0);
+            if (arr.length) options = arr;
           }
           break;
+
+        case "D":
+          // "yes" => branch A, "no" => branch B
+          branch = trimmedResp.toLowerCase() === "yes" ? "A" : "B";
+          break;
+
+        /* ---------------------------
+         * BRANCH A (D => yes)
+         * --------------------------- */
+        case "E":
+          // e.g. "while my selfish aspect ask mum to cook, my confident aspect prefer go out"
+          parseAspectsAndPreferences(trimmedResp, selfAspects);
+          break;
+
         case "E1":
         case "E2":
-          // Additional clarifications, no major changes to selfAspects
+          // additional clarifications, not stored
           break;
 
         case "F":
-          feelings = response;
-          break;
-        case "G":
-          prioritizedAspectAnswer = response;
+          // how the user feels about having these different views
+          if (trimmedResp) feelings = trimmedResp;
           break;
 
-        // CHANGED:
-        // If user says "no" at H => finalIdeaA = G
-        // If user says "yes" => aggregator expects final idea at H1
-        case "H":
-          if (response.toLowerCase().trim() === "no") {
-            finalIdeaA = prioritizedAspectAnswer;
+        case "G":
+          // user’s prioritized self-aspect
+          prioritizedAspectAnswer = trimmedResp;
+          {
+            // attempt to find "selfish aspect" or "confident aspect" in user text
+            let matchG = trimmedResp.match(/(selfish|confident|shy|laziness|[^\s]+ aspect)/i);
+            if (matchG) {
+              prioritizedAspectName = matchG[0].trim().toLowerCase();
+            }
           }
           break;
+
+        case "H":
+          // If user says "no" => final idea is from G's aspect or text
+          if (trimmedResp.toLowerCase() === "no") {
+            let matchedAspect = null;
+            if (prioritizedAspectName && selfAspects.length) {
+              matchedAspect = selfAspects.find(sa =>
+                sa.aspectName.toLowerCase().includes(prioritizedAspectName)
+              );
+            }
+            if (matchedAspect && matchedAspect.preference) {
+              finalIdeaA = matchedAspect.preference;
+            } else {
+              finalIdeaA = prioritizedAspectAnswer;
+            }
+          }
+          break;
+
         case "H1":
-          finalIdeaA = response; 
+          // user’s brainstormed idea
+          if (trimmedResp) finalIdeaA = trimmedResp;
           break;
 
         case "I":
         case "I1":
-          // Possibly an extra final idea typed at the overview
-          if (!finalIdeaA) {
-            finalIdeaA = response;
-          }
+          // final idea might appear here if we never set finalIdeaA
+          if (!finalIdeaA && trimmedResp) finalIdeaA = trimmedResp;
           break;
 
-        // Branch B
+        /* ---------------------------
+         * BRANCH B (D => no)
+         * --------------------------- */
         case "J":
           // yes => K, no => O
           break;
+
         case "K":
-          if (response.toLowerCase().includes("self")) {
-            const match = response.match(/(.*?self)\s*(?:because)?\s*(.*)/i);
+          // e.g. "my shy self aspect doesn't want to go out"
+          if (trimmedResp.toLowerCase().includes("self")) {
+            const match = trimmedResp.match(/(.*?self)\s*(?:because)?\s*(.*)/i);
             if (match) {
               const aspectName = match[1].trim();
               const preference = match[2].trim();
               selfAspects.push({ aspectName, preference });
             }
           } else {
-            finalIdeaB = response;
+            // fallback
+            if (trimmedResp) finalIdeaB = trimmedResp;
           }
           break;
+
         case "L":
-          if (!feelings) feelings = response;
+          // if user didn't fill F, store here
+          if (!feelings && trimmedResp) feelings = trimmedResp;
           break;
+
         case "N":
-          finalIdeaB = response;
+          if (trimmedResp) finalIdeaB = trimmedResp;
           break;
+
         case "I3":
         case "I4":
         case "P":
-          finalIdeaB = response;
+          if (trimmedResp) finalIdeaB = trimmedResp;
           break;
+
         case "O":
-          if (response && response.trim().length > 0) {
-            let aspectName = response.replace(/^(with\s+)?(my\s+)?/i, "").trim();
+          // user alignment aspect?
+          if (trimmedResp) {
+            let aspectName = trimmedResp.replace(/^(with\s+)?(my\s+)?/i, "").trim();
             if (
               aspectName &&
               !selfAspects.find(sa => sa.aspectName.toLowerCase() === aspectName.toLowerCase())
@@ -142,13 +158,24 @@ async function aggregateConversation(conversationId, userId) {
             }
           }
           break;
+
+        case "P1":
+          // If you want to store how user feels about alignment
+          // e.g. feelings += `[Alignment] ${trimmedResp}`;
+          // or do nothing if not needed
+          break;
+
         default:
           break;
       }
     }
 
-    // Combine final ideas from A/B
+    // Combine final ideas from branch A or B
     const finalIdea = finalIdeaA || finalIdeaB || "";
+
+    // If user never provided these fields => store as empty
+    if (!decision) decision = "";
+    if (!feelings) feelings = "";
 
     const conversationData = {
       conversationId,
@@ -162,6 +189,7 @@ async function aggregateConversation(conversationId, userId) {
       createdAt: new Date()
     };
 
+    // upsert the conversation doc
     const conversation = await Conversation.findOneAndUpdate(
       { conversationId, userId },
       conversationData,
@@ -173,6 +201,51 @@ async function aggregateConversation(conversationId, userId) {
     console.error("[Aggregate Conversation] Error:", error.message);
     throw error;
   }
+}
+
+/**
+ * parseAspectsAndPreferences
+ *
+ * Splits the user's text by commas and tries to parse aspectName + preference.
+ * Now we remove leading "while", "and", "but", etc. to handle strings like
+ * "while my confident aspect prefers ... "
+ */
+function parseAspectsAndPreferences(resp, selfAspectsArray) {
+  // remove leading "//" and trim
+  let cleaned = resp.replace(/^\/\/\s*/, "").trim();
+
+  // split by commas
+  const parts = cleaned.split(/[,;]+/);
+
+  parts.forEach(part => {
+    let trimPart = part.trim();
+
+    // remove possible filler words at the start, e.g. "while", "and", "but"
+    trimPart = trimPart.replace(/^while\s+/i, "");
+    trimPart = trimPart.replace(/^and\s+/i, "");
+    trimPart = trimPart.replace(/^but\s+/i, "");
+    // remove leading "my "
+    trimPart = trimPart.replace(/^my\s+/i, "");
+
+    // attempt to find "confident aspect", "selfish aspect", etc.
+    let matchAspect = trimPart.match(/(selfish|confident|shy|laziness|[^\s]+ aspect)/i);
+    let aspectName = matchAspect ? matchAspect[0].trim() : "aspect";
+
+    // remove aspectName from the text => remainder is preference
+    let remainder = trimPart.replace(aspectName, "").trim();
+
+    // also remove leading "my" from aspectName if present
+    aspectName = aspectName.replace(/^my\s+/i, "").trim();
+
+    // remove leftover "my" or slashes from remainder
+    remainder = remainder.replace(/^my\s+/i, "").replace(/^\/\//, "").trim();
+
+    // store
+    selfAspectsArray.push({
+      aspectName,
+      preference: remainder || ""
+    });
+  });
 }
 
 module.exports = { aggregateConversation };

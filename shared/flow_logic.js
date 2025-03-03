@@ -1,3 +1,4 @@
+// shared/flow_logic.js
 const mongoose = require("mongoose");
 const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
@@ -12,49 +13,52 @@ const exampleVariationsC2 = [
 const FINAL_REFLECTION =
   "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
 
-/**
- * IMPORTANT CHANGE (Two-step approach):
- * - Step H is now purely yes/no: "Would you like to brainstorm an alternative?"
- * - If user says "yes" => go to H1 => user shares new idea => aggregator sets final idea
- * - If user says "no" => aggregator uses G answer, then jump to overview (I).
- */
+// We add \n\n to get extra blank lines in the multiline overview
 const predefinedQuestions = {
-  B2: "",
+  B2: "", // intentionally blank, code uses fallback
   C1: "What decision are you thinking about right now? (For example, are you planning to go grocery shopping?)",
   C2: "Can you list three different options you might choose from for carrying out this decision? [EXAMPLE_C2]",
-  D: "Does this decision bring up any inner disagreement between your self-aspects? (For example, does one self-aspect prefer one option while another prefers a different one? Display the images) (Yes/No)",
+  D: "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)",
   E: "Can you share the names of the disagreeing self-aspects and which options each one prefers?",
-  E1: "Let's look at the perspectives of your self-aspects. Could you explain why each self-aspect leans toward its preferred option? For instance, why does Self-Aspect A prefer Option 1?",
+  E1: "Let's look at the perspectives of your self-aspects. Could you explain why each self-aspect leans toward its preferred option?",
   E2: "Can you also share what reasons these self-aspects have for not preferring the option favored by another?",
   F: "How do you feel about having these different views inside you? What does that feel like?",
   G: "In your present situation, which self-aspect feels more important or has higher priority than the others? Tell me why.",
-
-  // CHANGED: H is purely yes/no
   H: "Would you like to brainstorm a new idea that might help balance these views? (Yes/No)",
-
-  // CHANGED: H1 is where the user actually provides the brainstormed idea
   H1: "Please share the new idea or action that balances your prioritized self-aspect with the others.",
 
-  I1: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Brainstormed Idea]",
-  I: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Prioritized self-aspect's option]",
+  // Branch A Overviews
+  I1: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
+  I: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Prioritized self-aspect's option]`,
 
   J: "If the decision does not create a disagreement among your self-aspects as a whole, does it still clash with one particular self-aspect? (Yes/No)",
   K: "Can you name the self-aspect and tell me why it disagrees? What would it prefer to do instead, and why?",
   L: "How does it feel to notice this difference?",
   N: "What other option will better align with that self-aspect's needs and why?",
-  I3: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Brainstormed Idea]",
-  O: "It sounds like your decision and options align well with your self-aspects. With which one of your self-aspects does this decision align most, and why?",
-  P1: "",
-  P: "Which option out of the three would that self-aspect choose, and why?",
-  I4: "Overview: Decision: [User's decision] | Options: [Options listed] | Involved Self-aspects: [Self-aspects] | Feelings: [User's feelings] | Final Idea: [Chosen option by most aligned self-aspect]",
 
+  // Branch B Overview for single opposing view
+  I3: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
+
+  O: "It sounds like your decision and options align well with your self-aspects. With which one of your self-aspects does this decision align most, and why?",
+
+  // NEW: We add text for P1 from flowchart
+  P1: "How do you feel about the fact that your decisions and options are aligned with your self-aspects?",
+
+  P: "Which option out of the three would that self-aspect choose, and why?",
+
+  // Branch B overview for fully aligned
+  I4: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Chosen option by most aligned self-aspect]`,
+
+  // Reflection & End
   W: "Reflection placeholder. This is handled in send_message.js to display 2 messages in a row.",
   X: "End: Thanks for chatting and reflecting with me. Good luck with your decision!",
   Z1: "End: No worries, feel free to come back anytime!"
 };
 
+// Next step logic
 const getNextStep = (currentStep, userResponse) => {
   console.log(`[Flow Logic] Current Step: ${currentStep}, User Response: ${userResponse}`);
+
   const flow = {
     B2: () => userResponse.toLowerCase().trim() === "yes" ? "C1" : "Z1",
     C1: () => "C2",
@@ -64,21 +68,12 @@ const getNextStep = (currentStep, userResponse) => {
     E1: () => "E2",
     E2: () => "F",
     F: () => "G",
-
-    /**
-     * CHANGED: Step H is strictly yes/no
-     * If "yes" => go to H1 => user shares brainstorm
-     * If "no" => skip to I => aggregator uses G as final idea
-     */
     G: () => "H",
     H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "I",
     H1: () => "I1",
-
-    // Overviews
     I1: () => "W",
     I: () => "W",
 
-    // Branch B
     J: () => userResponse.toLowerCase().trim() === "yes" ? "K" : "O",
     K: () => "L",
     L: () => "N",
@@ -88,7 +83,6 @@ const getNextStep = (currentStep, userResponse) => {
     P1: () => "P",
     P: () => "I4",
     I4: () => "W",
-
     W: () => "X",
     X: () => "end",
     Z1: () => "end"
@@ -99,44 +93,57 @@ const getNextStep = (currentStep, userResponse) => {
   return nextStep;
 };
 
+// For overview steps, we do aggregator + placeholders
 const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => {
   try {
     let template = predefinedQuestions[nextStep];
     if (!template) return "End of flow.";
     console.log(`[Flow Logic] Populating template for step: ${nextStep}`);
 
+    // Insert random example into C2
     if (nextStep === "C2") {
       const randomIndex = Math.floor(Math.random() * exampleVariationsC2.length);
       const randomExample = exampleVariationsC2[randomIndex];
       template = template.replace("[EXAMPLE_C2]", randomExample);
     }
 
-    // For overview steps, we populate from aggregated conversation data
+    // aggregator for I1, I, I3, I4
     if (["I1", "I", "I3", "I4"].includes(nextStep)) {
       await aggregateConversation(conversationId, userId);
       const conversationDoc = await Conversation.findOne({ userId, conversationId });
       if (conversationDoc) {
-        let finalIdea = conversationDoc.finalIdea || "No final idea available";
-        let selfAspectsStr = "";
+        // If aggregator yields blank fields, show placeholders
+        let decision = conversationDoc.decision || "Not defined";
+        let feelings = conversationDoc.feelings || "Not defined";
+        let finalIdea = conversationDoc.finalIdea || "Not defined";
+        let selfAspectsStr = "No self-aspects mentioned";
+
         if (conversationDoc.selfAspects && conversationDoc.selfAspects.length) {
           selfAspectsStr = conversationDoc.selfAspects
-            .map(sa => `${sa.aspectName}${sa.preference ? " (" + sa.preference + ")" : ""}`)
+            .map(sa => {
+              let aspect = sa.aspectName || "aspect";
+              let pref = sa.preference || "No preference";
+              return `${aspect} (${pref})`;
+            })
             .join(", ");
-        } else {
-          selfAspectsStr = "No self-aspects mentioned";
         }
+
+        let optionsListed = "Not defined";
+        if (conversationDoc.options && conversationDoc.options.length) {
+          optionsListed = conversationDoc.options.join(", ");
+        }
+
+        // Replace placeholders in the template
         template = template
-          .replace("[User's decision]", conversationDoc.decision || "No decision provided")
-          .replace("[Options listed]", (conversationDoc.options && conversationDoc.options.length)
-            ? conversationDoc.options.join(", ")
-            : "No options provided")
+          .replace("[User's decision]", decision)
+          .replace("[Options listed]", optionsListed)
           .replace("[Self-aspects]", selfAspectsStr)
-          .replace("[User's feelings]", conversationDoc.feelings || "No feelings shared")
+          .replace("[User's feelings]", feelings)
           .replace("[Brainstormed Idea]", finalIdea)
           .replace("[Chosen option by most aligned self-aspect]", finalIdea)
           .replace("[Prioritized self-aspect's option]", finalIdea);
       } else {
-        console.warn("[Flow Logic] No aggregated conversation found for dynamic placeholders.");
+        console.warn("[Flow Logic] No aggregated conversation found for placeholders.");
         template = "Insufficient data to build overview.";
       }
     }
