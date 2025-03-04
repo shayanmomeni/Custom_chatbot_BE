@@ -1,5 +1,3 @@
-// controllers/send_message.js
-
 const UserResponse = require("../models/UserResponse");
 const {
   getNextStep,
@@ -9,6 +7,7 @@ const {
 } = require("../shared/flow_logic");
 const { getChatGPTValidation } = require("../utils/chatgpt");
 const { getUserAspectsAndImages } = require("../utils/file_utils");
+const { determineBrainstormedIdea } = require("../services/determine_brainstormed_idea");
 
 async function handleMessage(req, res) {
   let { message, userId, currentStep, conversationId } = req.body;
@@ -35,7 +34,7 @@ async function handleMessage(req, res) {
 
     const generatedConversationId = conversationId || Date.now().toString();
 
-    // track attempt
+    // Track attempt
     let existingResponse = await UserResponse.findOne({
       userId,
       questionKey: currentStep,
@@ -61,7 +60,7 @@ async function handleMessage(req, res) {
     console.log(`[ChatGPT] validationMessage: "${validationMessage}" | isValid: ${isValid}`);
 
     if (isValid) {
-      // store user response
+      // Store user response
       await UserResponse.findOneAndUpdate(
         { userId, questionKey: currentStep, conversationId: generatedConversationId },
         { response: message, attemptCount },
@@ -69,7 +68,19 @@ async function handleMessage(req, res) {
       );
       console.log(`[Backend] Stored valid response for step "${currentStep}" under conversation "${generatedConversationId}"`);
 
-      const nextStep = getNextStep(currentStep, message);
+      let nextStep;
+      // Special handling for step H using GPT helper
+      if (currentStep === "H") {
+        const ideaResult = await determineBrainstormedIdea(message);
+        console.log(`[Backend] Brainstormed idea determination: ${JSON.stringify(ideaResult)}`);
+        if (ideaResult.hasIdea) {
+          nextStep = "I1";
+        } else {
+          nextStep = "I";
+        }
+      } else {
+        nextStep = getNextStep(currentStep, message);
+      }
       console.log(`[Flow Logic] nextStep from ${currentStep}: "${nextStep}"`);
 
       if (nextStep === "end") {

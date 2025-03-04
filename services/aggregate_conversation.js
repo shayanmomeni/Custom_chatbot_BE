@@ -1,7 +1,9 @@
-// services/aggregate_conversation.js
 const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
 const { parseAspectsWithGPT } = require("./parse_aspects_gpt");
+const { determineBrainstormedIdea } = require("./determine_brainstormed_idea");
+const { determinePrioritizedAspect } = require("./determine_prioritized_aspect");
+const { compareAspectSimilarity } = require("./compare_aspect_similarity");
 
 async function aggregateConversation(conversationId, userId) {
   try {
@@ -58,37 +60,27 @@ async function aggregateConversation(conversationId, userId) {
           break;
         case "G":
           prioritizedAspectAnswer = trimmedResp;
-          {
-            let match = trimmedResp.match(/(selfish|confident|shy|laziness|[^\s]+(?: aspect)?)/i);
-            if (match) {
-              prioritizedAspectName = match[0].trim().toLowerCase();
-            }
-          }
+          // Use GPT intelligence to determine the prioritized aspect from the answer
+          prioritizedAspectName = await determinePrioritizedAspect(trimmedResp);
           break;
         case "H":
           {
-            // Check if user indicates no brainstormed idea.
-            const lowerResp = trimmedResp.toLowerCase();
-            if (
-              lowerResp === "no" ||
-              lowerResp.includes("no idea") ||
-              lowerResp.includes("don't have any") ||
-              lowerResp.includes("do not have any")
-            ) {
-              let matchedAspect = findAspectByName(selfAspects, prioritizedAspectName);
+            const { hasIdea, idea } = await determineBrainstormedIdea(trimmedResp);
+            if (!hasIdea) {
+              // Find a self-aspect whose concept matches the prioritized aspect
+              let matchedAspect = await findAspectByName(selfAspects, prioritizedAspectName);
               if (matchedAspect && matchedAspect.preference) {
                 finalIdeaA = stripPreface(matchedAspect.preference);
               } else {
-                finalIdeaA = prioritizedAspectAnswer;
+                finalIdeaA = ""; // No valid fallback available
               }
             } else {
-              // User provided a brainstormed idea – extract only the core option.
-              finalIdeaA = extractOption(trimmedResp);
+              finalIdeaA = extractOption(idea);
             }
           }
           break;
         case "H1":
-          if (trimmedResp) finalIdeaA = extractOption(trimmedResp);
+          // H1 is removed in the new flow
           break;
         case "I":
         case "I1":
@@ -170,14 +162,18 @@ async function aggregateConversation(conversationId, userId) {
 /**
  * findAspectByName
  * 
- * Tries to find a self-aspect from the list by comparing the given name.
+ * Tries to find a self-aspect from the list that is semantically similar to the given aspectName.
+ * Uses OpenAI semantic comparison for each self-aspect.
  */
-function findAspectByName(selfAspects, aspectNameLower) {
+async function findAspectByName(selfAspects, aspectNameLower) {
   if (!aspectNameLower) return null;
-  return selfAspects.find(sa =>
-    sa.aspectName.toLowerCase().includes(aspectNameLower) ||
-    aspectNameLower.includes(sa.aspectName.toLowerCase())
-  );
+  for (let sa of selfAspects) {
+    const isSame = await compareAspectSimilarity(sa.aspectName, aspectNameLower);
+    if (isSame) {
+      return sa;
+    }
+  }
+  return null;
 }
 
 /**

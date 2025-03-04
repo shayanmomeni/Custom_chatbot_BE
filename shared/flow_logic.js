@@ -1,8 +1,8 @@
-// shared/flow_logic.js
 const mongoose = require("mongoose");
 const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
 const { aggregateConversation } = require("../services/aggregate_conversation");
+const { refineOverview } = require("../services/refine_overview");
 
 const exampleVariationsC2 = [
   "For example, if you're thinking about groceries, you might consider online ordering, visiting a physical store, or using a delivery service.",
@@ -13,38 +13,36 @@ const exampleVariationsC2 = [
 const FINAL_REFLECTION =
   "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
 
-// Updated question for H
+// Updated predefined questions
 const predefinedQuestions = {
   B2: "",
   C1: "What decision are you thinking about right now? (For example, are you planning to go grocery shopping?)",
   C2: "Can you list three different options you might choose from for carrying out this decision? [EXAMPLE_C2]",
-  D: "Does this decision bring up any inner disagreement between your self-aspects? (Yes/No)",
+  D: "Does this decision bring up any inner disagreement between your self-aspects? (For example, does one self-aspect prefer one option while another prefers a different one? Display the images) (Yes/No)",
 
   // Branch A
   E: "Can you share the names of the disagreeing self-aspects and which options each one prefers?",
-  E1: "Let's look at the perspectives of your self-aspects. Could you explain why each self-aspect leans toward its preferred option?",
-  E2: "Can you also share what reasons these self-aspects have for not preferring the option favored by another?",
+  E1: "Let's look at the perspectives of your self-aspects. Could you explain why each self-aspect leans toward its preferred option? For instance, why does Self-Aspect A prefer Option 1?",
+  E2: "Can you also share what reasons these self-aspects have for not preferring the option favored by another? For example, why might Self-Aspect A not prefer the option preferred by Self-Aspect B or another self-aspect?",
   F: "How do you feel about having these different views inside you? What does that feel like?",
   G: "In your present situation, which self-aspect feels more important or has higher priority than the others? Tell me why.",
-  H: "Taking your prioritized self-aspect into account, can you think of an alternative that might help make both self-aspects happier? If yes, what is the alternative option and how can this make both self-aspects happier? (If not, we'll conclude with the option favored by your prioritized self-aspect.)",
-  H1: "Final Idea set to the brainstormed option.",
-
-  I1: `Thank you for your responses. Below I will present you an overview of our conversation:\n\nYour Decision: [User's decision]\n\nYour Options: [Options listed]\n\nYour Involved Self-aspects: [Self-aspects]\n\nYour Feelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
+  H: "Taking your prioritized self-aspect into account, would you like to brainstorm an alternative that might help balance these views? Please share your idea if you have one and explain briefly how does it help balance the conflict between self-aspects? (If not, we'll use the option favored by your prioritized self-aspect.)",
+  I1: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
   I: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Prioritized self-aspect's option]`,
 
   // Branch B
   J: "If the decision does not create a disagreement among your self-aspects as a whole, does it still clash with one particular self-aspect? (Yes/No)",
-  K: "Can you name the self-aspect and tell me why it disagrees? What would it prefer to do instead, and why?",
+  K: "Can you name the self-aspect and tell me why it disagrees?",
   L: "How does it feel to notice this difference?",
   N: "What other option that will better align with that self-aspect's needs?",
   
   I3: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
 
-  O: "It sounds like your decision and options align well with your self-aspects. With which one of your self-aspects does this decision align most, and why?",
-  P: "Which option out of the three would that self-aspect choose, and why?",
+  O: "It sounds like your decision and options align well with your self-aspects. How do you feel about this alignment?",
+  P: "With which one of your self-aspects does this decision align most, and why?",
   I4: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Chosen option by most aligned self-aspect]`,
 
-  W: "Reflection placeholder. This is handled in send_message.js to display 2 messages in a row.",
+  W: "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?",
   X: "End: Thanks for chatting and reflecting with me. Good luck with your decision!",
   Z1: "End: No worries, feel free to come back anytime!"
 };
@@ -64,9 +62,8 @@ const getNextStep = (currentStep, userResponse) => {
     E2: () => "F",
     F: () => "G",
     G: () => "H",
-    // For H: if answer is "yes" then go to H1, else go to I
-    H: () => userResponse.toLowerCase().trim() === "yes" ? "H1" : "I",
-    H1: () => "I1",
+    // For H, we now use a dummy mapping because GPT will decide externally.
+    H: () => "H", 
     I1: () => "W",
     I: () => "W",
 
@@ -127,6 +124,9 @@ const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => 
           .replace("[Brainstormed Idea]", finalIdea)
           .replace("[Chosen option by most aligned self-aspect]", finalIdea)
           .replace("[Prioritized self-aspect's option]", finalIdea);
+        
+        // Now refine the entire overview text using OpenAI
+        template = await refineOverview(template);
       } else {
         console.warn("[Flow Logic] No aggregated conversation found for placeholders.");
         template = "Insufficient data to build overview.";
