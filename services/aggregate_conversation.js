@@ -60,14 +60,13 @@ async function aggregateConversation(conversationId, userId) {
           break;
         case "G":
           prioritizedAspectAnswer = trimmedResp;
-          // Use GPT intelligence to determine the prioritized aspect from the answer
+          // For branch A, we use determinePrioritizedAspect here.
           prioritizedAspectName = await determinePrioritizedAspect(trimmedResp);
           break;
         case "H":
           {
             const { hasIdea, idea } = await determineBrainstormedIdea(trimmedResp);
             if (!hasIdea) {
-              // Find a self-aspect whose concept matches the prioritized aspect
               let matchedAspect = await findAspectByName(selfAspects, prioritizedAspectName);
               if (matchedAspect && matchedAspect.preference) {
                 finalIdeaA = stripPreface(matchedAspect.preference);
@@ -79,16 +78,9 @@ async function aggregateConversation(conversationId, userId) {
             }
           }
           break;
-        case "H1":
-          // H1 is removed in the new flow
-          break;
-        case "I":
-        case "I1":
-          if (!finalIdeaA && trimmedResp) finalIdeaA = trimmedResp;
-          break;
-
-        // Branch B
+        // Branch B cases:
         case "J":
+          // Nothing to do here.
           break;
         case "K":
           if (trimmedResp.toLowerCase().includes("self")) {
@@ -104,24 +96,29 @@ async function aggregateConversation(conversationId, userId) {
           }
           break;
         case "L":
-          if (!feelings) feelings = trimmedResp;
+          // In Branch B, L might be used for clarifying feelings; if not set, we leave it.
           break;
-        case "N":
-          finalIdeaB = trimmedResp;
-          break;
-        case "I3":
-          if (trimmedResp) finalIdeaB = trimmedResp;
-          break;
+        // New Branch B: O captures the feelings.
         case "O":
-          if (trimmedResp) {
-            let asName = trimmedResp.replace(/^(with\s+)?(my\s+)?/i, "").trim();
-            if (asName && !selfAspects.find(sa => sa.aspectName.toLowerCase() === asName.toLowerCase())) {
-              selfAspects.push({ aspectName: asName, preference: "" });
-            }
+          feelings = trimmedResp;
+          break;
+        // New Branch B: P1 captures the prioritized self-aspect information.
+        case "P1":
+          prioritizedAspectAnswer = trimmedResp;
+          prioritizedAspectName = await determinePrioritizedAspect(trimmedResp);
+          if (prioritizedAspectName && !selfAspects.find(sa => sa.aspectName.toLowerCase() === prioritizedAspectName.toLowerCase())) {
+            selfAspects.push({ aspectName: prioritizedAspectName, preference: "" });
           }
           break;
         case "P":
           finalIdeaB = trimmedResp;
+          break;
+        case "I":
+        case "I1":
+          if (!finalIdeaA && trimmedResp) finalIdeaA = trimmedResp;
+          break;
+        case "I3":
+          if (trimmedResp) finalIdeaB = trimmedResp;
           break;
         case "I4":
           finalIdeaB = trimmedResp;
@@ -131,6 +128,15 @@ async function aggregateConversation(conversationId, userId) {
       }
     }
 
+    // For branch B, if no selfAspects were recorded, add the prioritized aspect.
+    if (branch === "B" && (!selfAspects || selfAspects.length === 0) && prioritizedAspectName) {
+      selfAspects.push({ aspectName: prioritizedAspectName, preference: "" });
+    }
+
+    // Apply extraction for branch B: we want only the option text (without extra explanation).
+    if (branch === "B") {
+      finalIdeaB = extractOption(finalIdeaB);
+    }
     const finalIdea = finalIdeaA || finalIdeaB || "";
     if (!decision) decision = "";
     if (!feelings) feelings = "";
@@ -178,7 +184,7 @@ async function findAspectByName(selfAspects, aspectNameLower) {
 
 /**
  * stripPreface
- * 
+ *
  * Removes common leading phrases like "prefers to", "wants to", or "would like to" from a given text.
  */
 function stripPreface(text) {
@@ -189,8 +195,8 @@ function stripPreface(text) {
 
 /**
  * extractOption
- * 
- * From a brainstormed idea, extract only the option name.
+ *
+ * From a brainstormed idea or a final answer, extract only the option name.
  * For example, from:
  * "I think going to the parks with exercising tools will make both sides happier"
  * return "going to the parks with exercising tools"
@@ -200,8 +206,8 @@ function extractOption(text) {
   let lower = text.toLowerCase();
   // Remove common prefixes
   lower = lower.replace(/^(i think|i believe|maybe)\s+/i, "");
-  // Remove trailing clause starting with "will" or "might"
-  const index = lower.search(/\s+(will|might)\b/);
+  // Remove trailing clause starting with "because" (or similar) to drop extra explanation.
+  const index = lower.search(/\s+because\b/);
   if (index !== -1) {
     lower = lower.substring(0, index);
   }

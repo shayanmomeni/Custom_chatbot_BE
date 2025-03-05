@@ -3,6 +3,7 @@ const UserResponse = require("../models/UserResponse");
 const Conversation = require("../models/Conversation");
 const { aggregateConversation } = require("../services/aggregate_conversation");
 const { refineOverview } = require("../services/refine_overview");
+const { refineSelfAspects } = require("../services/refine_self_aspects");
 
 const exampleVariationsC2 = [
   "For example, if you're thinking about groceries, you might consider online ordering, visiting a physical store, or using a delivery service.",
@@ -13,7 +14,7 @@ const exampleVariationsC2 = [
 const FINAL_REFLECTION =
   "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
 
-// Updated predefined questions
+// Updated predefined questions with the new P1 question
 const predefinedQuestions = {
   B2: "",
   C1: "What decision are you thinking about right now? (For example, are you planning to go grocery shopping?)",
@@ -36,10 +37,10 @@ const predefinedQuestions = {
   L: "How does it feel to notice this difference?",
   N: "What other option that will better align with that self-aspect's needs?",
   
-  I3: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
-
+  // New steps for branch B
   O: "It sounds like your decision and options align well with your self-aspects. How do you feel about this alignment?",
-  P: "With which one of your self-aspects does this decision align most, and why?",
+  P1: "With which one of your self-aspects does this decision align most, and why?",
+  P: "Which option out of the three would that self-aspect choose, and why?",
   I4: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Chosen option by most aligned self-aspect]`,
 
   W: "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?",
@@ -69,11 +70,8 @@ const getNextStep = (currentStep, userResponse) => {
 
     // Branch B
     J: () => userResponse.toLowerCase().trim() === "yes" ? "K" : "O",
-    K: () => "L",
-    L: () => "N",
-    N: () => "I3",
-    I3: () => "W",
-    O: () => "P",
+    O: () => "P1",
+    P1: () => "P",
     P: () => "I4",
     I4: () => "W",
 
@@ -110,11 +108,13 @@ const populateDynamicPlaceholders = async (nextStep, userId, conversationId) => 
         let feelings = convo.feelings || "Not defined";
         let finalIdea = convo.finalIdea ? stripFinalIdea(convo.finalIdea) : "Not defined";
 
-        // For "Involved Self-aspects", only list aspect names.
-        let selfAspectsStr = "No self-aspects mentioned";
+        // For "Involved Self-aspects", first join the aspect names.
+        let rawSelfAspects = "No self-aspects mentioned";
         if (convo.selfAspects && convo.selfAspects.length) {
-          selfAspectsStr = convo.selfAspects.map(sa => sa.aspectName).join(", ");
+          rawSelfAspects = convo.selfAspects.map(sa => sa.aspectName).join(", ");
         }
+        // Now use OpenAI to refine the involved self-aspects to only contain the names.
+        const selfAspectsStr = await refineSelfAspects(rawSelfAspects);
 
         template = template
           .replace("[User's decision]", decision)
