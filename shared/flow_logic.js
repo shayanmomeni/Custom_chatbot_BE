@@ -14,7 +14,7 @@ const exampleVariationsC2 = [
 const FINAL_REFLECTION =
   "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?";
 
-// Updated predefined questions with the new P1 question
+// Updated predefined questions (Branch B now includes steps K, L, N, O, P1, P, I3/I4)
 const predefinedQuestions = {
   B2: "",
   C1: "What decision are you thinking about right now? (For example, are you planning to go grocery shopping?)",
@@ -36,11 +36,10 @@ const predefinedQuestions = {
   K: "Can you name the self-aspect and tell me why it disagrees?",
   L: "How does it feel to notice this difference?",
   N: "What other option that will better align with that self-aspect's needs?",
-  
-  // New steps for branch B
   O: "It sounds like your decision and options align well with your self-aspects. How do you feel about this alignment?",
   P1: "With which one of your self-aspects does this decision align most, and why?",
   P: "Which option out of the three would that self-aspect choose, and why?",
+  I3: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Brainstormed Idea]`,
   I4: `Overview:\n\nDecision: [User's decision]\n\nOptions: [Options listed]\n\nInvolved Self-aspects: [Self-aspects]\n\nFeelings: [User's feelings]\n\nFinal Idea: [Chosen option by most aligned self-aspect]`,
 
   W: "Final Reflection: Do you feel more confident in making choices that align with your values after our conversation? If yes, why?",
@@ -63,13 +62,17 @@ const getNextStep = (currentStep, userResponse) => {
     E2: () => "F",
     F: () => "G",
     G: () => "H",
-    // For H, we now use a dummy mapping because GPT will decide externally.
+    // For H, we use a dummy mapping because GPT will decide externally.
     H: () => "H", 
     I1: () => "W",
     I: () => "W",
 
     // Branch B
     J: () => userResponse.toLowerCase().trim() === "yes" ? "K" : "O",
+    K: () => "L",
+    L: () => "N",
+    N: () => "I3",
+    I3: () => "W",
     O: () => "P1",
     P1: () => "P",
     P: () => "I4",

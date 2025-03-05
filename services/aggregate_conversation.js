@@ -83,26 +83,31 @@ async function aggregateConversation(conversationId, userId) {
           // Nothing to do here.
           break;
         case "K":
-          if (trimmedResp.toLowerCase().includes("self")) {
-            let match = trimmedResp.match(/(.*?self)\s*(?:because)?\s*(.*)/i);
-            if (match) {
-              selfAspects.push({
-                aspectName: match[1].trim(),
-                preference: match[2].trim()
+          {
+            // Instead of using a regex, we call GPT-based parser to intelligently extract the self-aspect.
+            const aspects = await parseAspectsWithGPT(trimmedResp);
+            if (aspects.length > 0) {
+              aspects.forEach(a => {
+                selfAspects.push({
+                  aspectName: a.aspectName || "aspect",
+                  preference: a.preference || ""
+                });
               });
+            } else {
+              finalIdeaB = trimmedResp;
             }
-          } else {
-            finalIdeaB = trimmedResp;
           }
           break;
         case "L":
-          // In Branch B, L might be used for clarifying feelings; if not set, we leave it.
+          // Now capture feelings from Branch B
+          feelings = trimmedResp;
           break;
-        // New Branch B: O captures the feelings.
+        case "N":
+          finalIdeaB = trimmedResp;
+          break;
         case "O":
           feelings = trimmedResp;
           break;
-        // New Branch B: P1 captures the prioritized self-aspect information.
         case "P1":
           prioritizedAspectAnswer = trimmedResp;
           prioritizedAspectName = await determinePrioritizedAspect(trimmedResp);
@@ -128,12 +133,12 @@ async function aggregateConversation(conversationId, userId) {
       }
     }
 
-    // For branch B, if no selfAspects were recorded, add the prioritized aspect.
+    // If branch B and no selfAspects were recorded, add the prioritized aspect if available.
     if (branch === "B" && (!selfAspects || selfAspects.length === 0) && prioritizedAspectName) {
       selfAspects.push({ aspectName: prioritizedAspectName, preference: "" });
     }
 
-    // Apply extraction for branch B: we want only the option text (without extra explanation).
+    // For branch B, if finalIdeaB is set, process it to extract only the option text.
     if (branch === "B") {
       finalIdeaB = extractOption(finalIdeaB);
     }
@@ -200,13 +205,14 @@ function stripPreface(text) {
  * For example, from:
  * "I think going to the parks with exercising tools will make both sides happier"
  * return "going to the parks with exercising tools"
+ * (This function also removes trailing explanations that start with "because".)
  */
 function extractOption(text) {
   if (!text) return text;
   let lower = text.toLowerCase();
   // Remove common prefixes
   lower = lower.replace(/^(i think|i believe|maybe)\s+/i, "");
-  // Remove trailing clause starting with "because" (or similar) to drop extra explanation.
+  // Remove trailing clause starting with "because" to drop extra explanation.
   const index = lower.search(/\s+because\b/);
   if (index !== -1) {
     lower = lower.substring(0, index);
