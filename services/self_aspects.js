@@ -10,9 +10,11 @@ const saveSelfAspects = async (req, res) => {
       error_code: 'missing_user_id',
     });
   }
-  if (!Array.isArray(aspects) || aspects.length !== 10) {
+
+  // Now requiring exactly 6 self-aspects
+  if (!Array.isArray(aspects) || aspects.length !== 6) {
     return res.status(400).json({
-      message: 'Exactly 10 self-aspects are required.',
+      message: 'Exactly 6 self-aspects are required.',
       error_code: 'invalid_aspects_length',
     });
   }

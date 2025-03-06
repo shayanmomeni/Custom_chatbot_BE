@@ -11,10 +11,10 @@ const saveAssessment = async (req, res) => {
     });
   }
 
-  // Validate that answers is an array of 10 items
-  if (!Array.isArray(answers) || answers.length !== 10) {
+  // Validate that answers is an array of exactly 12 items
+  if (!Array.isArray(answers) || answers.length !== 12) {
     return res.status(400).json({
-      message: 'Answers must be an array of exactly 10 items (one for each question).',
+      message: 'Answers must be an array of exactly 12 items (one for each question).',
       error_code: 'invalid_answers_length',
     });
   }
@@ -23,6 +23,7 @@ const saveAssessment = async (req, res) => {
   for (let i = 0; i < answers.length; i++) {
     const questionAnswers = answers[i];
 
+    // Check if each question has 1–10 answers
     if (!Array.isArray(questionAnswers) || questionAnswers.length < 1 || questionAnswers.length > 10) {
       return res.status(400).json({
         message: `Question ${i + 1} must have at least 1 answer and no more than 10 answers.`,
@@ -30,6 +31,7 @@ const saveAssessment = async (req, res) => {
       });
     }
 
+    // Check if all answers are strings
     if (questionAnswers.some(answer => typeof answer !== 'string')) {
       return res.status(400).json({
         message: `Question ${i + 1} contains invalid answers. All answers must be strings.`,
