@@ -1,4 +1,9 @@
-require("dotenv").config();
+// Load environment variables based on NODE_ENV
+const envPath = process.env.NODE_ENV === "production"
+  ? "./env/production.env"
+  : "./env/development.env";
+require("dotenv").config({ path: envPath });
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const http = require("http");
@@ -32,7 +37,6 @@ const getAssessment = require("./services/get_assessment");
 const getUserResponses = require("./services/get_user_responses");
 const getConversation = require("./services/get_conversation");
 const getConversationSummary = require("./services/get_conversation_summary");
-
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -83,11 +87,11 @@ app.get("/assessment", getAssessment);
 // Self-Aspects Routes
 app.put("/self-aspects", saveSelfAspects);
 
-// Conversation Retrieval Route
+// Conversation Retrieval Routes
 app.get("/userresponses", getUserResponses);
 app.get("/conversation", getConversation);
 
-// this route to retrieve conversation summaries with full conversation details.
+// Route to retrieve conversation summaries with full details
 app.get("/conversation-summary", getConversationSummary);
 
 // Connect to MongoDB
@@ -104,3 +108,6 @@ if (process.env.NODE_ENV === "development") {
   console.log(`[Server] API documentation available at: ${BASE_URL}/api-docs`);
   console.log(`[Server] Static files served at: ${BASE_URL}/resources/images`);
 }
+
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("PORT:", process.env.PORT);
