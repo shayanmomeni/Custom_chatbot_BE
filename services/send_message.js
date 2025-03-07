@@ -33,6 +33,9 @@ async function handleMessage(req, res) {
     console.log(`[Backend] currentQuestion for step ${currentStep}: "${currentQuestion}"`);
 
     const generatedConversationId = conversationId || Date.now().toString();
+    if (!conversationId) {
+      console.log(`[Backend] New conversation started with id: "${generatedConversationId}"`);
+    }
 
     // Track attempt
     let existingResponse = await UserResponse.findOne({
@@ -83,13 +86,14 @@ async function handleMessage(req, res) {
       }
       console.log(`[Flow Logic] nextStep from ${currentStep}: "${nextStep}"`);
 
-      if (nextStep === "end") {
-        // Return final thank you message from predefinedQuestions["X"]
+      // If nextStep is Z1 or "end", then mark conversation as ended.
+      if (nextStep === "Z1" || nextStep === "end") {
+        console.log(`[Backend] Conversation ended for id: "${generatedConversationId}"`);
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
-            openAIResponse: predefinedQuestions["X"],
-            nextStep,
+            openAIResponse: predefinedQuestions["Z1"] || predefinedQuestions["X"],
+            nextStep: nextStep,
             isEnd: true,
             conversationId: generatedConversationId
           }
