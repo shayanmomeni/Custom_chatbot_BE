@@ -118,20 +118,20 @@ async function getChatGPTValidation({
     const responseGPT = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        // model: "gpt-4",
-        // messages: [{ role: "system", content: validationPrompt }],
-        // temperature: 0.4,
-        // max_tokens: 500,
-        // top_p: 1,
-        // frequency_penalty: 0,
-        // presence_penalty: 0
-        model: "gpt-3.5-turbo",
+        model: "gpt-4",
         messages: [{ role: "system", content: validationPrompt }],
         temperature: 0.4,
-        max_tokens: 300,
+        max_tokens: 500,
         top_p: 1,
         frequency_penalty: 0,
         presence_penalty: 0
+        // model: "gpt-3.5-turbo",
+        // messages: [{ role: "system", content: validationPrompt }],
+        // temperature: 0.4,
+        // max_tokens: 300,
+        // top_p: 1,
+        // frequency_penalty: 0,
+        // presence_penalty: 0
 
       },
       {
