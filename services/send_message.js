@@ -1,3 +1,5 @@
+// controllers/send_message.js
+
 const UserResponse = require("../models/UserResponse");
 const {
   getNextStep,
@@ -19,25 +21,27 @@ async function handleMessage(req, res) {
   }
 
   try {
+    // Validate currentStep
     const hasStep = Object.prototype.hasOwnProperty.call(predefinedQuestions, currentStep);
     if (!hasStep) {
       console.error("[Backend] Invalid current step:", currentStep);
       return res.status(400).json({ message: "Invalid current step." });
     }
 
+    // Fallback text for B2 if blank
     let currentQuestion = predefinedQuestions[currentStep] || "";
-    // B2 might be blank in predefinedQuestions, so we fallback
     if (currentStep === "B2" && !currentQuestion.trim()) {
       currentQuestion = "Would you like to reflect on a decision now? Please answer yes or no.";
     }
     console.log(`[Backend] currentQuestion for step ${currentStep}: "${currentQuestion}"`);
 
+    // Generate or reuse conversationId
     const generatedConversationId = conversationId || Date.now().toString();
     if (!conversationId) {
       console.log(`[Backend] New conversation started with id: "${generatedConversationId}"`);
     }
 
-    // Track attempt
+    // Track attempt count
     let existingResponse = await UserResponse.findOne({
       userId,
       questionKey: currentStep,
@@ -49,6 +53,7 @@ async function handleMessage(req, res) {
     }
     console.log(`[Backend] Attempt Count for step ${currentStep}: ${attemptCount}`);
 
+    // Determine user aspects for GPT validation
     const aspectImagePairs = getUserAspectsAndImages(userId);
     const userAspectNames = aspectImagePairs.map(obj => obj.aspectName);
 
@@ -63,7 +68,7 @@ async function handleMessage(req, res) {
     console.log(`[ChatGPT] validationMessage: "${validationMessage}" | isValid: ${isValid}`);
 
     if (isValid) {
-      // Store user response
+      // Store valid response
       await UserResponse.findOneAndUpdate(
         { userId, questionKey: currentStep, conversationId: generatedConversationId },
         { response: message, attemptCount },
@@ -72,7 +77,7 @@ async function handleMessage(req, res) {
       console.log(`[Backend] Stored valid response for step "${currentStep}" under conversation "${generatedConversationId}"`);
 
       let nextStep;
-      // Special handling for step H using GPT helper
+      // Special handling for step H (brainstormed idea)
       if (currentStep === "H") {
         const ideaResult = await determineBrainstormedIdea(message);
         console.log(`[Backend] Brainstormed idea determination: ${JSON.stringify(ideaResult)}`);
@@ -86,19 +91,34 @@ async function handleMessage(req, res) {
       }
       console.log(`[Flow Logic] nextStep from ${currentStep}: "${nextStep}"`);
 
-      // If nextStep is Z1 or "end", then mark conversation as ended.
-      if (nextStep === "Z1" || nextStep === "end") {
-        console.log(`[Backend] Conversation ended for id: "${generatedConversationId}"`);
+      // ***** FIXED LOGIC FOR "Z1" vs "end" *****
+      // If nextStep is "Z1": user doesn't want to reflect at the beginning => show Z1
+      // If nextStep is "end": final conversation end => show final "X" message
+      if (nextStep === "Z1") {
+        console.log(`[Backend] Next Step is "Z1" => user declined reflection at start.`);
         return res.status(200).json({
           message: "Message processed successfully",
           data: {
-            openAIResponse: predefinedQuestions["Z1"] || predefinedQuestions["X"],
+            openAIResponse: predefinedQuestions["Z1"] || "End: No worries, feel free to come back anytime!",
             nextStep: nextStep,
             isEnd: true,
             conversationId: generatedConversationId
           }
         });
       }
+      if (nextStep === "end") {
+        console.log(`[Backend] Next Step is "end" => conversation is fully concluded.`);
+        return res.status(200).json({
+          message: "Message processed successfully",
+          data: {
+            openAIResponse: predefinedQuestions["X"] || "End: Thanks for chatting and reflecting with me!",
+            nextStep: nextStep,
+            isEnd: true,
+            conversationId: generatedConversationId
+          }
+        });
+      }
+      // ***** END FIXED LOGIC *****
 
       // If next step is D => return aspect images
       if (nextStep === "D") {
@@ -134,6 +154,7 @@ async function handleMessage(req, res) {
         });
       }
 
+      // Otherwise standard next question
       let nextQuestionText = "End of flow.";
       if (predefinedQuestions[nextStep]) {
         nextQuestionText = await populateDynamicPlaceholders(nextStep, userId, generatedConversationId);
@@ -150,6 +171,7 @@ async function handleMessage(req, res) {
       });
     }
 
+    // If invalid => remain on current step
     console.log(`[Backend] Invalid => remain on step: "${currentStep}"`);
     return res.status(200).json({
       message: "Message processed successfully",
