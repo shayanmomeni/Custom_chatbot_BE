@@ -37,6 +37,10 @@ const getAssessment = require("./services/get_assessment");
 const getUserResponses = require("./services/get_user_responses");
 const getConversation = require("./services/get_conversation");
 const getConversationSummary = require("./services/get_conversation_summary");
+const updateUserStatus = require("./services/update_user_status");
+
+// Import User model for fetching user data
+const User = require("./models/User");
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -86,6 +90,24 @@ app.get("/assessment", getAssessment);
 
 // Self-Aspects Routes
 app.put("/self-aspects", saveSelfAspects);
+
+// Update User Status Route
+app.post("/update-user-status", updateUserStatus);
+
+// New GET Endpoint to retrieve user data by userId
+app.get("/user/:userId", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    return res.status(200).json({ data: user });
+  } catch (error) {
+    console.error("Error fetching user:", error.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 // Conversation Retrieval Routes
 app.get("/userresponses", getUserResponses);

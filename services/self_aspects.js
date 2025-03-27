@@ -1,9 +1,8 @@
 const User = require('../models/User');
 
 const saveSelfAspects = async (req, res) => {
-  const { userId, aspects } = req.body; // Extract userId and selected aspects from body
+  const { userId, aspects } = req.body;
 
-  // Validate input
   if (!userId) {
     return res.status(400).json({
       message: 'User ID is required',
@@ -11,7 +10,6 @@ const saveSelfAspects = async (req, res) => {
     });
   }
 
-  // Now requiring exactly 6 self-aspects
   if (!Array.isArray(aspects) || aspects.length !== 6) {
     return res.status(400).json({
       message: 'Exactly 6 self-aspects are required.',
@@ -20,13 +18,7 @@ const saveSelfAspects = async (req, res) => {
   }
 
   try {
-    // Update the user's selected aspects
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { selectedAspects: aspects },
-      { new: true } // Return the updated user document
-    );
-
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
         message: 'User not found',
@@ -34,9 +26,13 @@ const saveSelfAspects = async (req, res) => {
       });
     }
 
+    user.selectedAspects = aspects;
+    user.assessment_aspect_completed = user.assessmentAnswers.length === 12;
+    await user.save();
+
     return res.status(200).json({
       message: 'Self-aspects saved successfully',
-      data: user,
+      data: user
     });
   } catch (error) {
     console.error('Error saving self-aspects:', error.message);

@@ -15,12 +15,20 @@ const UserSchema = new mongoose.Schema({
     required: true,
   },
   assessmentAnswers: {
-    type: [String], 
-    default: [],    
+    type: [String],
+    default: [],
   },
   selectedAspects: {
-    type: [String], 
-    default: [],    
+    type: [String],
+    default: [],
+  },
+  imagesUploaded: {
+    type: Boolean,
+    default: false,
+  },
+  assessment_aspect_completed: {
+    type: Boolean,
+    default: false,
   },
   createdAt: {
     type: Date,
