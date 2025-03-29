@@ -12,18 +12,20 @@ services:
       - ./resources:/usr/src/app/resources
     depends_on:
       - mongo
+    networks:
+      - server-network
 
   mongo:
     image: mongo:latest
     container_name: mongodb
     restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    networks:
+      - server-network
 
 volumes:
   mongo_data:
+
+networks:
+  server-network:
