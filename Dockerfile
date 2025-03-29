@@ -13,6 +13,9 @@ RUN npm install --production
 # Copy the rest of your app's code
 COPY . .
 
+# Set environment variable explicitly (OPTIONAL fallback)
+ENV NODE_ENV=production
+
 # Expose the port defined in your .env (default: 8888)
 EXPOSE ${PORT}
 

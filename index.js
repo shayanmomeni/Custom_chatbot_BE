@@ -11,6 +11,7 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerDocument = require("./swagger/swagger.json");
 const connectToMongoDB = require("./database");
 const path = require("path");
+const authMiddleware = require("./middleware/auth");
 
 const app = express();
 const server = http.createServer(app);
@@ -46,6 +47,8 @@ const User = require("./models/User");
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+
+
 // Serve images statically
 app.use(
   "/resources/images",
@@ -54,7 +57,15 @@ app.use(
 console.log(`[Server] Serving images from: ${path.join(__dirname, "resources/images")}`);
 
 // Swagger setup
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+const swaggerAuth = require("./middleware/swagger_auth");
+
+if (process.env.NODE_ENV === "production") {
+  app.use("/api-docs", swaggerAuth, swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+} else {
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+}
+
+
 
 // Error handling middleware (centralized)
 app.use((err, req, res, next) => {
@@ -77,6 +88,9 @@ app.get("/", (req, res) => {
 // Authentication Routes
 app.post("/login", loginService);
 app.post("/register", registerService);
+
+// Middleware to authenticate user for protected routes
+app.use(authMiddleware) 
 
 // User Management Routes
 app.delete("/user/:userId", removeUserService);
